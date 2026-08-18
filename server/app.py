@@ -1,3 +1,4 @@
+import io
 import os
 
 # Disable CUDA/GPU probing and silence verbose TensorFlow logs on CPU
@@ -261,33 +262,23 @@ def predict_plant_disease():
     try:
 
         # ------------------------------------------------------
-        # OPEN IMAGE
+        # OPEN IMAGE SAFELY IN-MEMORY
         # ------------------------------------------------------
 
-        image = Image.open(
-            file.stream
-        )
+        file_bytes = file.read()
+        if not file_bytes:
+            return jsonify({
+                "success": False,
+                "error": "Uploaded image file is empty.",
+            }), 400
 
-        # Verify that the uploaded file really is
-        # a readable image.
-        image.verify()
-
-        # Re-open after verify because verify() invalidates
-        # the image object for normal loading.
-        file.stream.seek(0)
-
-        image = Image.open(
-            file.stream
-        )
+        image = Image.open(io.BytesIO(file_bytes))
 
         # ------------------------------------------------------
         # BASIC IMAGE SAFETY
         # ------------------------------------------------------
 
-        # Avoid accidentally processing extremely large
-        # decompressed images.
         max_dimension = 6000
-
         if (
             image.width > max_dimension
             or image.height > max_dimension
@@ -324,27 +315,14 @@ def predict_plant_disease():
         # ------------------------------------------------------
         # PREDICT
         # ------------------------------------------------------
-        #
-        # Only one inference at a time.
-        # This avoids multiple TensorFlow executions
-        # competing for the limited Render Free CPU/RAM.
-        # ------------------------------------------------------
 
-        with prediction_lock:
-
-            print(
-                "Starting plant disease inference..."
-            )
-
-            predictions = model.predict(
-                input_data,
-                batch_size=1,
-                verbose=0,
-            )
-
-            print(
-                "Plant disease inference completed."
-            )
+        print("Starting plant disease inference...")
+        predictions = model.predict(
+            input_data,
+            batch_size=1,
+            verbose=0,
+        )
+        print("Plant disease inference completed.")
 
         # ------------------------------------------------------
         # OUTPUT
