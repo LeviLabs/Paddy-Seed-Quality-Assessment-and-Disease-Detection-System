@@ -1,0 +1,73 @@
+name: peddy
+description: "AI Powered Paddy Seed Quality Assessment and Disease Detection System."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_localizations:
+    sdk: flutter
+
+  intl: ^0.20.2
+
+  # Cupertino Icons
+  cupertino_icons: ^1.0.8
+
+  # SVG Support
+  flutter_svg: ^2.3.0
+
+  # Firebase
+  firebase_core: ^3.15.2
+  firebase_auth: ^5.7.0
+
+  # Google Sign In
+  google_sign_in: ^6.3.0
+
+  # Local Storage
+  shared_preferences: ^2.5.3
+
+  # State Management
+  provider: ^6.1.5+1
+
+  # Image Picker
+  camera: ^0.11.2
+  image_picker: ^1.2.3
+
+  # HTTP Requests
+  http: ^1.6.0
+
+  # Loading Animations
+  flutter_spinkit: ^5.2.2
+
+  # UI Animations
+  animate_do: ^4.2.0
+
+  # Glass Effect
+  glassmorphism: ^3.0.0
+
+  # Google Fonts
+  google_fonts: ^6.3.2
+
+  cloud_firestore: ^5.6.0
+  #permission_handler: ^11.3.0
+  permission_handler: ^12.0.1
+  geolocator: ^14.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/

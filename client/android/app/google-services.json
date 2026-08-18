@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "132222798964",
+    "project_id": "ankur-e06b6",
+    "storage_bucket": "ankur-e06b6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:132222798964:android:46e8a49385636d3d359521",
+        "android_client_info": {
+          "package_name": "com.example.peddy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "132222798964-rn9tfh0rokssu50hqsu4e57q3u6ofgvf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.peddy",
+            "certificate_hash": "fc14e05040d476d712371193df627f7967692114"
+          }
+        },
+        {
+          "client_id": "132222798964-3h7oq79cfeavmptrseipvqch45itp3pn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATpor-gCQDtVChpaZy9uzNmKZ6xuq0dkk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "132222798964-3h7oq79cfeavmptrseipvqch45itp3pn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "132222798964-ihmruekr1be5ierqob4jpb5nl0ib9q87.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.peddy"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
