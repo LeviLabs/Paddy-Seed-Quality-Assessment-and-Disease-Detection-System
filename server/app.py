@@ -1,7 +1,8 @@
 import os
+import threading
 
 import numpy as np
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from flask import Flask, jsonify, request
 
 import keras
@@ -32,7 +33,6 @@ class CompatibleDense(Dense):
     def from_config(cls, config):
         config = dict(config)
 
-        # Remove the extra field saved in the model.
         config.pop(
             "quantization_config",
             None,
@@ -78,7 +78,8 @@ try:
         tf.__version__,
     )
 except Exception:
-    pass
+    tf = None
+
 
 print(
     "Keras:",
@@ -115,12 +116,18 @@ print(
 
 
 # ============================================================
-# CLASS NAMES
+# PREDICTION LOCK
 # ============================================================
 #
-# IMPORTANT:
-# This order must match the order used when the model
-# was trained.
+# Keep only one TensorFlow inference active at a time.
+# This is especially important on the Render Free instance.
+# ============================================================
+
+prediction_lock = threading.Lock()
+
+
+# ============================================================
+# CLASS NAMES
 # ============================================================
 
 CLASS_NAMES = [
@@ -180,7 +187,8 @@ def preprocess_image(image):
     image = image.convert("RGB")
 
     image = image.resize(
-        (224, 224)
+        (224, 224),
+        Image.Resampling.BILINEAR,
     )
 
     image_array = np.asarray(
@@ -227,6 +235,8 @@ def predict_plant_disease():
             "error": "No image selected",
         }), 400
 
+    image = None
+
     try:
 
         # ------------------------------------------------------
@@ -237,6 +247,45 @@ def predict_plant_disease():
             file.stream
         )
 
+        # Verify that the uploaded file really is
+        # a readable image.
+        image.verify()
+
+        # Re-open after verify because verify() invalidates
+        # the image object for normal loading.
+        file.stream.seek(0)
+
+        image = Image.open(
+            file.stream
+        )
+
+        # ------------------------------------------------------
+        # BASIC IMAGE SAFETY
+        # ------------------------------------------------------
+
+        # Avoid accidentally processing extremely large
+        # decompressed images.
+        max_dimension = 6000
+
+        if (
+            image.width > max_dimension
+            or image.height > max_dimension
+        ):
+            return jsonify({
+                "success": False,
+                "error": (
+                    "Image is too large. "
+                    "Please upload a smaller image."
+                ),
+            }), 400
+
+        print(
+            "Received image:",
+            image.width,
+            "x",
+            image.height,
+        )
+
         # ------------------------------------------------------
         # PREPROCESS
         # ------------------------------------------------------
@@ -245,19 +294,37 @@ def predict_plant_disease():
             image
         )
 
+        print(
+            "Prepared model input:",
+            input_data.shape,
+            input_data.dtype,
+        )
+
         # ------------------------------------------------------
         # PREDICT
         # ------------------------------------------------------
+        #
+        # Only one inference at a time.
+        # This avoids multiple TensorFlow executions
+        # competing for the limited Render Free CPU/RAM.
+        # ------------------------------------------------------
 
-        predictions = model.predict(
-            input_data,
-            verbose=0,
-        )
+        with prediction_lock:
 
-        print(
-            "Raw model output:",
-            predictions,
-        )
+            print(
+                "Starting plant disease inference..."
+            )
+
+            output = model(
+                input_data,
+                training=False,
+            )
+
+            predictions = output.numpy()
+
+            print(
+                "Plant disease inference completed."
+            )
 
         # ------------------------------------------------------
         # OUTPUT
@@ -343,7 +410,7 @@ def predict_plant_disease():
         # RESPONSE
         # ------------------------------------------------------
 
-        return jsonify({
+        result = {
             "success": True,
             "test_type": "plant_disease",
             "disease": predicted_class,
@@ -351,11 +418,29 @@ def predict_plant_disease():
                 confidence * 100,
                 2,
             ),
-            "class_index":
-                predicted_index,
-            "predictions":
-                all_predictions,
-        })
+            "class_index": predicted_index,
+            "predictions": all_predictions,
+        }
+
+        print(
+            "Prediction result:",
+            result,
+        )
+
+        return jsonify(
+            result
+        )
+
+    except UnidentifiedImageError:
+        print(
+            "Prediction error: uploaded file "
+            "is not a valid image."
+        )
+
+        return jsonify({
+            "success": False,
+            "error": "Uploaded file is not a valid image.",
+        }), 400
 
     except Exception as e:
 
@@ -368,6 +453,14 @@ def predict_plant_disease():
             "success": False,
             "error": str(e),
         }), 500
+
+    finally:
+
+        if image is not None:
+            try:
+                image.close()
+            except Exception:
+                pass
 
 
 # ============================================================
