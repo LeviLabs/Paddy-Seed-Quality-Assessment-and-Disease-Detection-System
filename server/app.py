@@ -11,6 +11,7 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 import keras
 from keras.models import load_model
@@ -18,6 +19,7 @@ from keras.layers import Dense
 from keras.applications.efficientnet import preprocess_input
 
 app = Flask(__name__)
+CORS(app)  # Allow all cross-origin requests
 
 # ============================================================
 # COMPATIBLE DENSE LAYER (Fix for legacy Keras models)
