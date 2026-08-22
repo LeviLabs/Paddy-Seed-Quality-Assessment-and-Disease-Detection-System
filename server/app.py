@@ -1,6 +1,7 @@
 import io
 import os
 import json
+import gc
 
 # Force TensorFlow into CPU-only mode and minimize verbose logging
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -76,48 +77,40 @@ DEFAULT_PADDY_CLASSES = ["RB gold", "mota pan dhan"]
 DISEASE_CLASSES = load_class_names(DISEASE_JSON_PATH, DEFAULT_DISEASE_CLASSES)
 PADDY_CLASSES = load_class_names(PADDY_JSON_PATH, DEFAULT_PADDY_CLASSES)
 
-print(f"Loaded {len(DISEASE_CLASSES)} disease classes: {DISEASE_CLASSES}")
-print(f"Loaded {len(PADDY_CLASSES)} paddy classes: {PADDY_CLASSES}")
+print(f"Registered {len(DISEASE_CLASSES)} disease classes and {len(PADDY_CLASSES)} paddy classes.")
 
 # ============================================================
-# LOAD MODELS & PRE-WARM GRAPH
+# LAZY MODEL LOADERS (Protects 512MB RAM on Render)
 # ============================================================
 
-print("\n--- Loading Machine Learning Models ---")
+_disease_model = None
+_paddy_model = None
 
-# 1. Load Plant Disease Model
-try:
-    disease_model = load_model(
-        DISEASE_MODEL_PATH,
-        compile=False,
-        custom_objects={
-            "Dense": CompatibleDense,
-            "preprocess_input": preprocess_input,
-        },
-    )
-    print(f"Plant Disease Model loaded successfully from {DISEASE_MODEL_PATH}")
-    dummy_input = np.zeros((1, 224, 224, 3), dtype=np.float32)
-    disease_model.predict(dummy_input, batch_size=1, verbose=0)
-    print("Plant Disease Model pre-warmed successfully.")
-except Exception as e:
-    print(f"Error loading Plant Disease Model: {e}")
-    disease_model = None
+def get_disease_model():
+    global _disease_model
+    if _disease_model is None:
+        print(f"Loading Plant Disease Model from {DISEASE_MODEL_PATH}...")
+        _disease_model = load_model(
+            DISEASE_MODEL_PATH,
+            compile=False,
+            custom_objects={
+                "Dense": CompatibleDense,
+                "preprocess_input": preprocess_input,
+            },
+        )
+        print("Plant Disease Model loaded successfully.")
+    return _disease_model
 
-# 2. Load Paddy Classification Model
-try:
-    paddy_model = load_model(
-        PADDY_MODEL_PATH,
-        compile=False,
-    )
-    print(f"Paddy Classification Model loaded successfully from {PADDY_MODEL_PATH}")
-    dummy_input = np.zeros((1, 224, 224, 3), dtype=np.float32)
-    paddy_model.predict(dummy_input, batch_size=1, verbose=0)
-    print("Paddy Classification Model pre-warmed successfully.")
-except Exception as e:
-    print(f"Error loading Paddy Classification Model: {e}")
-    paddy_model = None
-
-print("--- Model Loading Complete ---\n")
+def get_paddy_model():
+    global _paddy_model
+    if _paddy_model is None:
+        print(f"Loading Paddy Classification Model from {PADDY_MODEL_PATH}...")
+        _paddy_model = load_model(
+            PADDY_MODEL_PATH,
+            compile=False,
+        )
+        print("Paddy Classification Model loaded successfully.")
+    return _paddy_model
 
 # ============================================================
 # IMAGE PREPROCESSING UTILITY
@@ -186,7 +179,7 @@ DISEASE_INFO = {
 def index():
     return jsonify({
         "success": True,
-        "message": "Paddy Seed Quality Assessment and Disease Detection AI Backend is live.",
+        "message": "Paddy AI Backend is running.",
         "endpoints": [
             "GET  /health",
             "POST /predict/plant-disease",
@@ -201,14 +194,16 @@ def health():
         "status": "healthy",
         "models": {
             "plant_disease": {
-                "loaded": disease_model is not None,
                 "classes": DISEASE_CLASSES,
                 "total_classes": len(DISEASE_CLASSES),
+                "model_file": os.path.basename(DISEASE_MODEL_PATH),
+                "exists": os.path.isfile(DISEASE_MODEL_PATH),
             },
             "paddy_classification": {
-                "loaded": paddy_model is not None,
                 "classes": PADDY_CLASSES,
                 "total_classes": len(PADDY_CLASSES),
+                "model_file": os.path.basename(PADDY_MODEL_PATH),
+                "exists": os.path.isfile(PADDY_MODEL_PATH),
             },
         },
     })
@@ -219,12 +214,6 @@ def health():
 
 @app.route("/predict/plant-disease", methods=["POST"])
 def predict_plant_disease():
-    if disease_model is None:
-        return jsonify({
-            "success": False,
-            "error": "Plant Disease model is not loaded on the server.",
-        }), 503
-
     if "image" not in request.files:
         return jsonify({
             "success": False,
@@ -239,6 +228,7 @@ def predict_plant_disease():
         }), 400
 
     try:
+        model = get_disease_model()
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({
@@ -249,7 +239,7 @@ def predict_plant_disease():
         input_data = preprocess_image_bytes(file_bytes)
 
         # Run inference
-        raw_predictions = disease_model.predict(input_data, batch_size=1, verbose=0)[0]
+        raw_predictions = model.predict(input_data, batch_size=1, verbose=0)[0]
         probabilities = [float(p) for p in raw_predictions]
 
         top_index = int(np.argmax(probabilities))
@@ -295,12 +285,6 @@ def predict_plant_disease():
 
 @app.route("/predict/paddy-classification", methods=["POST"])
 def predict_paddy_classification():
-    if paddy_model is None:
-        return jsonify({
-            "success": False,
-            "error": "Paddy Classification model is not loaded on the server.",
-        }), 503
-
     if "image" not in request.files:
         return jsonify({
             "success": False,
@@ -315,6 +299,7 @@ def predict_paddy_classification():
         }), 400
 
     try:
+        model = get_paddy_model()
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({
@@ -325,7 +310,7 @@ def predict_paddy_classification():
         input_data = preprocess_image_bytes(file_bytes)
 
         # Run inference
-        raw_pred = paddy_model.predict(input_data, batch_size=1, verbose=0)[0]
+        raw_pred = model.predict(input_data, batch_size=1, verbose=0)[0]
 
         if len(raw_pred) == 1:
             prob_class_1 = float(raw_pred[0])
