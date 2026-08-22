@@ -1,15 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
-
 import 'profile_page.dart';
 import 'history.dart';
+import 'input.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -929,174 +926,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // CAMERA CARD → OPTIONS SHEET → CAMERA CAPTURE
-  // ============================================================
-
-  void _showCameraOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-          decoration: const BoxDecoration(
-            color: Color(0xFF4CAF7D),
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Text(
-                'Camera',
-                style: GoogleFonts.poppins(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Choose what you want to test',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.white.withOpacity(0.85),
-                ),
-              ),
-              const SizedBox(height: 22),
-              _cameraOptionTile(
-                context: sheetContext,
-                icon: Icons.coronavirus_rounded,
-                title: 'Plant Disease',
-                subtitle: 'Scan a leaf for disease detection',
-                testType: 'plant_disease',
-              ),
-              const SizedBox(height: 14),
-              _cameraOptionTile(
-                context: sheetContext,
-                icon: Icons.grass_rounded,
-                title: 'Paddy Classification',
-                subtitle: 'Scan paddy seeds for purity and quality',
-                testType: 'paddy_classification',
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _cameraOptionTile({
-    required BuildContext context,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String testType,
-  }) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-        _pickImageForTest(testType);
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: const Color(0xFF2E7D53)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withOpacity(0.85),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickImageForTest(String testType) async {
-    final ImagePicker picker = ImagePicker();
-
-    XFile? photo;
-    try {
-      photo = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
-      );
-    } catch (e) {
-      debugPrint('Camera error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open camera')),
-        );
-      }
-      return;
-    }
-
-    if (photo == null) return; // user cancelled
-
-    if (!mounted) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _TestPreviewPage(
-          imageFile: File(photo!.path),
-          testType: testType,
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
   // MOOD GRID
   // ============================================================
 
@@ -1122,7 +951,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   flex: 3,
                   child: GestureDetector(
-                    onTap: () => _showCameraOptions(context),
+                    onTap: () => InputPage.show(context),
                     child: _moodCard(
                       title: 'Camera',
                       subtitle:
@@ -1404,113 +1233,4 @@ class WeatherData {
     required this.weatherCode,
     required this.locationName,
   });
-}
-
-// ================================================================
-// TEST PREVIEW PAGE
-// ================================================================
-class _TestPreviewPage extends StatefulWidget {
-  final File imageFile;
-  final String testType;
-
-  const _TestPreviewPage({
-    required this.imageFile,
-    required this.testType,
-  });
-
-  @override
-  State<_TestPreviewPage> createState() => _TestPreviewPageState();
-}
-
-class _TestPreviewPageState extends State<_TestPreviewPage> {
-  bool _isRunning = false;
-
-  String get _testLabel {
-    return widget.testType == 'plant_disease'
-        ? 'Plant Disease'
-        : 'Paddy Classification';
-  }
-
-  Future<void> _runTest() async {
-    setState(() => _isRunning = true);
-
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!mounted) return;
-
-    setState(() => _isRunning = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_testLabel analysis complete')),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F3ED),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF6F3ED),
-        elevation: 0,
-        title: Text(
-          _testLabel,
-          style: GoogleFonts.poppins(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        iconTheme: const IconThemeData(color: Colors.black87),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.file(
-                    widget.imageFile,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isRunning ? null : _runTest,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4CAF7D),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _isRunning
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          'Analyze $_testLabel',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

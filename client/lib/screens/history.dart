@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -435,9 +439,25 @@ class _HistoryCard extends StatelessWidget {
   }
 
   Widget _thumbnail() {
-    final ImageProvider image = entry.isNetworkImage
-        ? NetworkImage(entry.imagePath) as ImageProvider
-        : AssetImage(entry.imagePath);
+    ImageProvider image;
+
+    if (entry.imagePath.startsWith('data:image') || entry.imagePath.length > 300) {
+      try {
+        final String rawBase64 = entry.imagePath.contains(',')
+            ? entry.imagePath.split(',').last
+            : entry.imagePath;
+        final Uint8List bytes = base64Decode(rawBase64);
+        image = MemoryImage(bytes);
+      } catch (_) {
+        image = AssetImage(entry.imagePath);
+      }
+    } else if (entry.isNetworkImage || entry.imagePath.startsWith('http')) {
+      image = NetworkImage(entry.imagePath);
+    } else if (File(entry.imagePath).existsSync()) {
+      image = FileImage(File(entry.imagePath));
+    } else {
+      image = AssetImage(entry.imagePath);
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),

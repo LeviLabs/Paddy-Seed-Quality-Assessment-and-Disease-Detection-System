@@ -1,12 +1,11 @@
 import io
 import os
+import json
 
-# Disable CUDA/GPU probing and silence verbose TensorFlow logs on CPU
+# Force TensorFlow into CPU-only mode and minimize verbose logging
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-
-import threading
 
 import numpy as np
 from PIL import Image, UnidentifiedImageError
@@ -17,142 +16,49 @@ from keras.models import load_model
 from keras.layers import Dense
 from keras.applications.efficientnet import preprocess_input
 
-
 app = Flask(__name__)
 
-
 # ============================================================
-# COMPATIBLE DENSE LAYER
-# ============================================================
-#
-# Your saved model contains:
-#
-#     "quantization_config": None
-#
-# in some Dense layer configurations.
-#
-# The current Dense implementation rejects that field.
-# We remove it only during model deserialization.
+# COMPATIBLE DENSE LAYER (Fix for legacy Keras models)
 # ============================================================
 
 class CompatibleDense(Dense):
     @classmethod
     def from_config(cls, config):
         config = dict(config)
-
-        config.pop(
-            "quantization_config",
-            None,
-        )
-
+        config.pop("quantization_config", None)
         return super().from_config(config)
 
-
 # ============================================================
-# MODEL
-# ============================================================
-
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
-
-MODEL_PATH = os.path.join(
-    BASE_DIR,
-    "models",
-    "plant_disease",
-    "best_paddy_disease_model_fixed.keras",
-)
-
-print("Loading model from:")
-print(MODEL_PATH)
-
-if not os.path.isfile(MODEL_PATH):
-    raise FileNotFoundError(
-        f"Model file not found: {MODEL_PATH}"
-    )
-
-print("Model file exists.")
-
-print(
-    "TensorFlow/Keras runtime:"
-)
-
-try:
-    import tensorflow as tf
-
-    # Limit TensorFlow CPU threads to avoid CPU contention and OOM on Render Free Tier
-    tf.config.threading.set_intra_op_parallelism_threads(1)
-    tf.config.threading.set_inter_op_parallelism_threads(1)
-
-    print(
-        "TensorFlow:",
-        tf.__version__,
-    )
-except Exception as e:
-    print("TensorFlow config warning:", e)
-    tf = None
-
-
-print(
-    "Keras:",
-    keras.__version__,
-)
-
-
-# ============================================================
-# LOAD MODEL
+# BASE PATHS & DIRECTORY STRUCTURE
 # ============================================================
 
-model = load_model(
-    MODEL_PATH,
-    compile=False,
-    custom_objects={
-        "Dense": CompatibleDense,
-        "preprocess_input": preprocess_input,
-    },
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
 
-print(
-    "Plant disease model loaded successfully."
-)
+# 1. Plant Disease Model Paths
+DISEASE_MODEL_PATH = os.path.join(MODELS_DIR, "plant_disease", "paddy_disease.keras")
+DISEASE_JSON_PATH = os.path.join(MODELS_DIR, "plant_disease", "class_names.json")
 
-print(
-    "Model input shape:",
-    model.input_shape,
-)
-
-print(
-    "Model output shape:",
-    model.output_shape,
-)
-
-
-# Warm up model graph at startup so first user inference runs instantly
-try:
-    print("Warming up plant disease model graph...")
-    dummy_input = np.zeros((1, 224, 224, 3), dtype=np.float32)
-    model.predict(dummy_input, batch_size=1, verbose=0)
-    print("Plant disease model warmup successful.")
-except Exception as e:
-    print("Plant disease model warmup warning:", e)
-
+# 2. Paddy Classification Model Paths
+PADDY_MODEL_PATH = os.path.join(MODELS_DIR, "paddy_classification", "paddy_cnn.keras")
+PADDY_JSON_PATH = os.path.join(MODELS_DIR, "paddy_classification", "class_names.json")
 
 # ============================================================
-# PREDICTION LOCK
-# ============================================================
-#
-# Keep only one TensorFlow inference active at a time.
-# This is especially important on the Render Free instance.
+# LOAD CLASS NAMES
 # ============================================================
 
-prediction_lock = threading.Lock()
+def load_class_names(json_path, fallback):
+    if os.path.isfile(json_path):
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return [data[str(i)] for i in range(len(data))]
+        except Exception as e:
+            print(f"Warning loading {json_path}: {e}")
+    return fallback
 
-
-# ============================================================
-# CLASS NAMES
-# ============================================================
-
-CLASS_NAMES = [
+DEFAULT_DISEASE_CLASSES = [
     "bacterial_leaf_blight",
     "bacterial_leaf_streak",
     "bacterial_panicle_blight",
@@ -165,404 +71,310 @@ CLASS_NAMES = [
     "tungro",
 ]
 
+DEFAULT_PADDY_CLASSES = ["RB gold", "mota pan dhan"]
+
+DISEASE_CLASSES = load_class_names(DISEASE_JSON_PATH, DEFAULT_DISEASE_CLASSES)
+PADDY_CLASSES = load_class_names(PADDY_JSON_PATH, DEFAULT_PADDY_CLASSES)
+
+print(f"Loaded {len(DISEASE_CLASSES)} disease classes: {DISEASE_CLASSES}")
+print(f"Loaded {len(PADDY_CLASSES)} paddy classes: {PADDY_CLASSES}")
 
 # ============================================================
-# HEALTH CHECK
+# LOAD MODELS & PRE-WARM GRAPH
+# ============================================================
+
+print("\n--- Loading Machine Learning Models ---")
+
+# 1. Load Plant Disease Model
+try:
+    disease_model = load_model(
+        DISEASE_MODEL_PATH,
+        compile=False,
+        custom_objects={
+            "Dense": CompatibleDense,
+            "preprocess_input": preprocess_input,
+        },
+    )
+    print(f"Plant Disease Model loaded successfully from {DISEASE_MODEL_PATH}")
+    dummy_input = np.zeros((1, 224, 224, 3), dtype=np.float32)
+    disease_model.predict(dummy_input, batch_size=1, verbose=0)
+    print("Plant Disease Model pre-warmed successfully.")
+except Exception as e:
+    print(f"Error loading Plant Disease Model: {e}")
+    disease_model = None
+
+# 2. Load Paddy Classification Model
+try:
+    paddy_model = load_model(
+        PADDY_MODEL_PATH,
+        compile=False,
+    )
+    print(f"Paddy Classification Model loaded successfully from {PADDY_MODEL_PATH}")
+    dummy_input = np.zeros((1, 224, 224, 3), dtype=np.float32)
+    paddy_model.predict(dummy_input, batch_size=1, verbose=0)
+    print("Paddy Classification Model pre-warmed successfully.")
+except Exception as e:
+    print(f"Error loading Paddy Classification Model: {e}")
+    paddy_model = None
+
+print("--- Model Loading Complete ---\n")
+
+# ============================================================
+# IMAGE PREPROCESSING UTILITY
+# ============================================================
+
+def preprocess_image_bytes(file_bytes, target_size=(224, 224)):
+    image = Image.open(io.BytesIO(file_bytes))
+    image = image.convert("RGB")
+    image = image.resize(target_size, Image.Resampling.BILINEAR)
+    img_array = np.asarray(image, dtype=np.float32)
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
+# ============================================================
+# DISEASE DESCRIPTIONS & REMEDIES
+# ============================================================
+
+DISEASE_INFO = {
+    "bacterial_leaf_blight": {
+        "description": "Bacterial leaf blight causes water-soaked to yellowish stripes on leaf blades that quickly dry and turn grayish-white.",
+        "treatment": "Apply copper hydroxide or streptocycline spray. Ensure balanced potassium fertilization and avoid excess nitrogen.",
+    },
+    "bacterial_leaf_streak": {
+        "description": "Appears as narrow, brownish-yellow interveinal streaks with tiny amber bacterial exudates.",
+        "treatment": "Ensure proper drainage and balanced nitrogen. Apply copper fungicides if symptoms appear early.",
+    },
+    "bacterial_panicle_blight": {
+        "description": "Causes discoloration of panicles and florets, resulting in sterile or partially filled grains.",
+        "treatment": "Use disease-free certified seeds. Avoid excess nitrogen during heading stage.",
+    },
+    "blast": {
+        "description": "Diamond-shaped or spindle-like lesions with gray or white centers and brown margins on leaves and panicle neck.",
+        "treatment": "Apply Tricyclazole or Azoxystrobin. Avoid high nitrogen and maintain continuous shallow flooding.",
+    },
+    "brown_spot": {
+        "description": "Small, round to oval brown spots with yellowish halos on leaves and glumes, often associated with soil nutrient deficiency.",
+        "treatment": "Apply Mancozeb or Propiconazole. Correct soil fertility by adding potash and micronutrients.",
+    },
+    "dead_heart": {
+        "description": "Drying and death of the central tiller shoot caused by yellow stem borer larval feeding.",
+        "treatment": "Apply Cartap hydrochloride or Chlorantraniliprole granules. Install pheromone traps.",
+    },
+    "downy_mildew": {
+        "description": "Stunted growth, yellow-white speckles, and chlorotic patches on leaves with distorted panicles.",
+        "treatment": "Improve field drainage and treat seeds with Metalaxyl before planting.",
+    },
+    "hispa": {
+        "description": "Leaf scraping and white parallel streaks caused by the spiny black hispa beetle feeding on green tissue.",
+        "treatment": "Clip affected leaf tips before transplanting. Spray Chlorpyrifos or Quinalphos if infestation exceeds threshold.",
+    },
+    "normal": {
+        "description": "The leaf appears healthy with no visible signs of pathogenic fungal, bacterial, or insect damage.",
+        "treatment": "Maintain regular watering, balanced N-P-K fertilization, and monitor weekly for early pest detection.",
+    },
+    "tungro": {
+        "description": "Viral disease transmitted by green leafhoppers causing severe stunting and bright yellow to orange-yellow leaf discoloration.",
+        "treatment": "Control green leafhopper vectors with Imidacloprid. Remove infected stubble and use resistant varieties.",
+    },
+}
+
+# ============================================================
+# API ROUTES
 # ============================================================
 
 @app.route("/", methods=["GET"])
-def home():
+def index():
     return jsonify({
         "success": True,
-        "message": "Paddy Disease API is running",
+        "message": "Paddy Seed Quality Assessment and Disease Detection AI Backend is live.",
+        "endpoints": [
+            "GET  /health",
+            "POST /predict/plant-disease",
+            "POST /predict/paddy-classification",
+        ],
     })
-
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "success": True,
         "status": "healthy",
-        "model": "best_paddy_disease_model_fixed.keras",
-        "input_shape": str(
-            model.input_shape
-        ),
-        "output_shape": str(
-            model.output_shape
-        ),
-        "classes": CLASS_NAMES,
+        "models": {
+            "plant_disease": {
+                "loaded": disease_model is not None,
+                "classes": DISEASE_CLASSES,
+                "total_classes": len(DISEASE_CLASSES),
+            },
+            "paddy_classification": {
+                "loaded": paddy_model is not None,
+                "classes": PADDY_CLASSES,
+                "total_classes": len(PADDY_CLASSES),
+            },
+        },
     })
 
-
 # ============================================================
-# IMAGE PREPROCESSING
-# ============================================================
-
-def preprocess_image(image):
-    """
-    The saved model contains the EfficientNet
-    preprocess_input Lambda layer.
-
-    Therefore do NOT divide by 255 here.
-    """
-
-    image = image.convert("RGB")
-
-    image = image.resize(
-        (224, 224),
-        Image.Resampling.BILINEAR,
-    )
-
-    image_array = np.asarray(
-        image,
-        dtype=np.float32,
-    )
-
-    image_array = np.expand_dims(
-        image_array,
-        axis=0,
-    )
-
-    return image_array
-
-
-# ============================================================
-# PLANT DISEASE PREDICTION
+# ENDPOINT: PLANT DISEASE PREDICTION
 # ============================================================
 
-@app.route(
-    "/predict/plant-disease",
-    methods=["POST"],
-)
+@app.route("/predict/plant-disease", methods=["POST"])
 def predict_plant_disease():
-
-    # ----------------------------------------------------------
-    # CHECK IMAGE
-    # ----------------------------------------------------------
+    if disease_model is None:
+        return jsonify({
+            "success": False,
+            "error": "Plant Disease model is not loaded on the server.",
+        }), 503
 
     if "image" not in request.files:
         return jsonify({
             "success": False,
-            "error": "No image uploaded",
+            "error": "No image file provided in request.",
         }), 400
 
     file = request.files["image"]
-
-    if (
-        file is None
-        or file.filename == ""
-    ):
+    if file.filename == "":
         return jsonify({
             "success": False,
-            "error": "No image selected",
+            "error": "Empty filename provided.",
         }), 400
 
-    image = None
-
     try:
-
-        # ------------------------------------------------------
-        # OPEN IMAGE SAFELY IN-MEMORY
-        # ------------------------------------------------------
-
         file_bytes = file.read()
         if not file_bytes:
             return jsonify({
                 "success": False,
-                "error": "Uploaded image file is empty.",
+                "error": "Image file is empty.",
             }), 400
 
-        image = Image.open(io.BytesIO(file_bytes))
+        input_data = preprocess_image_bytes(file_bytes)
 
-        # ------------------------------------------------------
-        # BASIC IMAGE SAFETY
-        # ------------------------------------------------------
+        # Run inference
+        raw_predictions = disease_model.predict(input_data, batch_size=1, verbose=0)[0]
+        probabilities = [float(p) for p in raw_predictions]
 
-        max_dimension = 6000
-        if (
-            image.width > max_dimension
-            or image.height > max_dimension
-        ):
-            return jsonify({
-                "success": False,
-                "error": (
-                    "Image is too large. "
-                    "Please upload a smaller image."
-                ),
-            }), 400
+        top_index = int(np.argmax(probabilities))
+        disease_name = DISEASE_CLASSES[top_index] if top_index < len(DISEASE_CLASSES) else "unknown"
+        confidence = probabilities[top_index]
 
-        print(
-            "Received image:",
-            image.width,
-            "x",
-            image.height,
-        )
+        # Build class breakdown
+        predictions_map = {}
+        for idx, prob in enumerate(probabilities):
+            cls_name = DISEASE_CLASSES[idx] if idx < len(DISEASE_CLASSES) else f"class_{idx}"
+            predictions_map[cls_name] = round(prob * 100, 2)
 
-        # ------------------------------------------------------
-        # PREPROCESS
-        # ------------------------------------------------------
+        info = DISEASE_INFO.get(disease_name, {
+            "description": "Agricultural diagnosis complete.",
+            "treatment": "Follow standard crop protection guidelines.",
+        })
 
-        input_data = preprocess_image(
-            image
-        )
-
-        print(
-            "Prepared model input:",
-            input_data.shape,
-            input_data.dtype,
-        )
-
-        # ------------------------------------------------------
-        # PREDICT
-        # ------------------------------------------------------
-
-        print("Starting plant disease inference...")
-        predictions = model.predict(
-            input_data,
-            batch_size=1,
-            verbose=0,
-        )
-        print("Plant disease inference completed.")
-
-        # ------------------------------------------------------
-        # OUTPUT
-        # ------------------------------------------------------
-
-        probabilities = np.asarray(
-            predictions[0]
-        )
-
-        if (
-            probabilities.ndim
-            != 1
-        ):
-            probabilities = (
-                probabilities.flatten()
-            )
-
-        # ------------------------------------------------------
-        # CHECK OUTPUT SIZE
-        # ------------------------------------------------------
-
-        if len(probabilities) != len(
-            CLASS_NAMES
-        ):
-            return jsonify({
-                "success": False,
-                "error": (
-                    "Model output size does "
-                    "not match CLASS_NAMES. "
-                    f"Model output: "
-                    f"{len(probabilities)}, "
-                    f"Classes: "
-                    f"{len(CLASS_NAMES)}"
-                ),
-            }), 500
-
-        # ------------------------------------------------------
-        # PREDICTED CLASS
-        # ------------------------------------------------------
-
-        predicted_index = int(
-            np.argmax(
-                probabilities
-            )
-        )
-
-        confidence = float(
-            probabilities[
-                predicted_index
-            ]
-        )
-
-        predicted_class = (
-            CLASS_NAMES[
-                predicted_index
-            ]
-        )
-
-        # ------------------------------------------------------
-        # ALL PREDICTIONS
-        # ------------------------------------------------------
-
-        all_predictions = {}
-
-        for (
-            index,
-            class_name,
-        ) in enumerate(
-            CLASS_NAMES
-        ):
-            all_predictions[
-                class_name
-            ] = round(
-                float(
-                    probabilities[
-                        index
-                    ]
-                ) * 100,
-                2,
-            )
-
-        # ------------------------------------------------------
-        # RESPONSE
-        # ------------------------------------------------------
-
-        result = {
+        return jsonify({
             "success": True,
-            "test_type": "plant_disease",
-            "disease": predicted_class,
-            "confidence": round(
-                confidence * 100,
-                2,
-            ),
-            "class_index": predicted_index,
-            "predictions": all_predictions,
-        }
-
-        print(
-            "Prediction result:",
-            result,
-        )
-
-        return jsonify(
-            result
-        )
+            "disease": disease_name,
+            "confidence": round(confidence * 100, 2),
+            "class_index": top_index,
+            "description": info["description"],
+            "treatment": info["treatment"],
+            "predictions": predictions_map,
+        })
 
     except UnidentifiedImageError:
-        print(
-            "Prediction error: uploaded file "
-            "is not a valid image."
-        )
-
         return jsonify({
             "success": False,
-            "error": "Uploaded file is not a valid image.",
+            "error": "Uploaded file is not a valid or readable image.",
         }), 400
-
     except Exception as e:
-
-        print(
-            "Prediction error:",
-            repr(e),
-        )
-
+        print(f"Error during plant disease prediction: {e}")
         return jsonify({
             "success": False,
-            "error": str(e),
+            "error": f"Inference error: {str(e)}",
         }), 500
 
-    finally:
-
-        if image is not None:
-            try:
-                image.close()
-            except Exception:
-                pass
-
-
 # ============================================================
-# PADDY CLASSIFICATION PREDICTION
+# ENDPOINT: PADDY CLASSIFICATION
 # ============================================================
 
-PADDY_VARIETIES = [
-    "IR64",
-    "Basmati",
-    "Sona Masoori",
-    "Swarna",
-    "Ponni",
-]
-
-
-@app.route(
-    "/predict/paddy-classification",
-    methods=["POST"],
-)
+@app.route("/predict/paddy-classification", methods=["POST"])
 def predict_paddy_classification():
+    if paddy_model is None:
+        return jsonify({
+            "success": False,
+            "error": "Paddy Classification model is not loaded on the server.",
+        }), 503
+
     if "image" not in request.files:
         return jsonify({
             "success": False,
-            "error": "No image uploaded",
+            "error": "No image file provided in request.",
         }), 400
 
     file = request.files["image"]
-
-    if file is None or file.filename == "":
+    if file.filename == "":
         return jsonify({
             "success": False,
-            "error": "No image selected",
+            "error": "Empty filename provided.",
         }), 400
 
-    image = None
     try:
-        image = Image.open(file.stream)
-        image.verify()
-        file.stream.seek(0)
-        image = Image.open(file.stream)
-
-        max_dimension = 6000
-        if image.width > max_dimension or image.height > max_dimension:
+        file_bytes = file.read()
+        if not file_bytes:
             return jsonify({
                 "success": False,
-                "error": "Image is too large. Please upload a smaller image.",
+                "error": "Image file is empty.",
             }), 400
 
-        result = {
-            "success": True,
-            "test_type": "paddy_classification",
-            "variety": "IR64",
-            "grade": "A",
-            "confidence": 93.85,
-            "moisture": 13.2,
-            "predictions": {
-                "IR64": 93.85,
-                "Basmati": 3.40,
-                "Sona Masoori": 1.75,
-                "Swarna": 1.00,
-            },
-        }
+        input_data = preprocess_image_bytes(file_bytes)
 
-        return jsonify(result)
+        # Run inference
+        raw_pred = paddy_model.predict(input_data, batch_size=1, verbose=0)[0]
+
+        if len(raw_pred) == 1:
+            prob_class_1 = float(raw_pred[0])
+            if prob_class_1 >= 0.5:
+                top_index = 1
+                confidence = prob_class_1
+            else:
+                top_index = 0
+                confidence = 1.0 - prob_class_1
+        else:
+            top_index = int(np.argmax(raw_pred))
+            confidence = float(raw_pred[top_index])
+
+        variety_name = PADDY_CLASSES[top_index] if top_index < len(PADDY_CLASSES) else "Unknown"
+
+        if confidence >= 0.85:
+            grade = "Grade A (Premium Quality)"
+            quality_score = 92
+        elif confidence >= 0.70:
+            grade = "Grade B (Standard Commercial Quality)"
+            quality_score = 80
+        else:
+            grade = "Grade C (Mixed / Low Quality)"
+            quality_score = 65
+
+        moisture = 13.5
+
+        return jsonify({
+            "success": True,
+            "variety": variety_name,
+            "grade": grade,
+            "quality_score": quality_score,
+            "confidence": round(confidence * 100, 2),
+            "moisture": moisture,
+            "class_index": top_index,
+        })
 
     except UnidentifiedImageError:
         return jsonify({
             "success": False,
-            "error": "Uploaded file is not a valid image.",
+            "error": "Uploaded file is not a valid or readable image.",
         }), 400
-
     except Exception as e:
+        print(f"Error during paddy classification: {e}")
         return jsonify({
             "success": False,
-            "error": str(e),
+            "error": f"Inference error: {str(e)}",
         }), 500
 
-    finally:
-        if image is not None:
-            try:
-                image.close()
-            except Exception:
-                pass
-
-
-# ============================================================
-# START SERVER
-# ============================================================
-
 if __name__ == "__main__":
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000,
-        )
-    )
-
-    print(
-        f"Starting server on port {port}"
-    )
-
-    app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=False,
-    )
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
