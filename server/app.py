@@ -119,12 +119,55 @@ def get_paddy_model():
 # ============================================================
 
 def preprocess_image_bytes(file_bytes, target_size=(224, 224)):
-    image = Image.open(io.BytesIO(file_bytes))
-    image = image.convert("RGB")
-    image = image.resize(target_size, Image.Resampling.BILINEAR)
-    img_array = np.asarray(image, dtype=np.float32)
-    img_array = np.expand_dims(img_array, axis=0)
-    return img_array
+    """
+    Decode and preprocess uploaded image.
+
+    This function includes detailed logging so Render logs can show
+    exactly what image bytes reached the server and whether Pillow
+    can decode them.
+    """
+    print("========== IMAGE DEBUG ==========")
+    print("Byte length:", len(file_bytes))
+    print("First 20 bytes:", file_bytes[:20])
+
+    try:
+        # First open and verify the complete image stream.
+        image = Image.open(io.BytesIO(file_bytes))
+        image.verify()
+
+        # verify() consumes the image object, so reopen it for actual use.
+        image = Image.open(io.BytesIO(file_bytes))
+
+        print("PIL format:", image.format)
+        print("PIL size:", image.size)
+        print("PIL mode:", image.mode)
+
+        # Force actual pixel decoding.
+        image.load()
+
+        image = image.convert("RGB")
+        image = image.resize(
+            target_size,
+            Image.Resampling.BILINEAR
+        )
+
+        img_array = np.asarray(image, dtype=np.float32)
+        img_array = np.expand_dims(img_array, axis=0)
+
+        print("Final array shape:", img_array.shape)
+        print("================================")
+
+        return img_array
+
+    except UnidentifiedImageError:
+        print("IMAGE DEBUG ERROR: Pillow could not identify this file.")
+        print("================================")
+        raise
+
+    except Exception as e:
+        print("IMAGE DEBUG ERROR:", repr(e))
+        print("================================")
+        raise
 
 # ============================================================
 # DISEASE DESCRIPTIONS & REMEDIES
@@ -230,15 +273,27 @@ def predict_plant_disease():
         }), 400
 
     try:
-        model = get_disease_model()
+        # Read and inspect the uploaded file BEFORE loading the TensorFlow model.
         file_bytes = file.read()
+
+        print("========== UPLOAD DEBUG ==========")
+        print("Filename:", file.filename)
+        print("Content-Type:", file.content_type)
+        print("File size:", len(file_bytes))
+        print("First 20 bytes:", file_bytes[:20])
+        print("==================================")
+
         if not file_bytes:
             return jsonify({
                 "success": False,
                 "error": "Image file is empty.",
             }), 400
 
+        # Decode/validate the image before loading the model.
         input_data = preprocess_image_bytes(file_bytes)
+
+        # Only load the model after the image is confirmed readable.
+        model = get_disease_model()
 
         # Run inference
         raw_predictions = model.predict(input_data, batch_size=1, verbose=0)[0]
@@ -269,10 +324,12 @@ def predict_plant_disease():
             "predictions": predictions_map,
         })
 
-    except UnidentifiedImageError:
+    except UnidentifiedImageError as e:
+        print("PLANT DISEASE IMAGE ERROR:", repr(e))
         return jsonify({
             "success": False,
             "error": "Uploaded file is not a valid or readable image.",
+            "details": repr(e),
         }), 400
     except Exception as e:
         print(f"Error during plant disease prediction: {e}")
@@ -301,15 +358,27 @@ def predict_paddy_classification():
         }), 400
 
     try:
-        model = get_paddy_model()
+        # Read and inspect the uploaded file BEFORE loading the TensorFlow model.
         file_bytes = file.read()
+
+        print("========== PADDY UPLOAD DEBUG ==========")
+        print("Filename:", file.filename)
+        print("Content-Type:", file.content_type)
+        print("File size:", len(file_bytes))
+        print("First 20 bytes:", file_bytes[:20])
+        print("========================================")
+
         if not file_bytes:
             return jsonify({
                 "success": False,
                 "error": "Image file is empty.",
             }), 400
 
+        # Decode/validate the image before loading the model.
         input_data = preprocess_image_bytes(file_bytes)
+
+        # Only load the model after the image is confirmed readable.
+        model = get_paddy_model()
 
         # Run inference
         raw_pred = model.predict(input_data, batch_size=1, verbose=0)[0]
@@ -328,32 +397,19 @@ def predict_paddy_classification():
 
         variety_name = PADDY_CLASSES[top_index] if top_index < len(PADDY_CLASSES) else "Unknown"
 
-        if confidence >= 0.85:
-            grade = "Grade A (Premium Quality)"
-            quality_score = 92
-        elif confidence >= 0.70:
-            grade = "Grade B (Standard Commercial Quality)"
-            quality_score = 80
-        else:
-            grade = "Grade C (Mixed / Low Quality)"
-            quality_score = 65
-
-        moisture = 13.5
-
         return jsonify({
             "success": True,
             "variety": variety_name,
-            "grade": grade,
-            "quality_score": quality_score,
             "confidence": round(confidence * 100, 2),
-            "moisture": moisture,
             "class_index": top_index,
         })
 
-    except UnidentifiedImageError:
+    except UnidentifiedImageError as e:
+        print("PADDY IMAGE ERROR:", repr(e))
         return jsonify({
             "success": False,
             "error": "Uploaded file is not a valid or readable image.",
+            "details": repr(e),
         }), 400
     except Exception as e:
         print(f"Error during paddy classification: {e}")
