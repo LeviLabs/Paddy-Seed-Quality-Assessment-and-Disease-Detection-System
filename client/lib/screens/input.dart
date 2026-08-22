@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -15,19 +16,31 @@ class InputPage {
   InputPage._();
 
   // ============================================================
-  // RENDER API
+  // RENDER API — TWO SEPARATE SERVICES
   // ============================================================
 
-  static const String renderBaseUrl =
-      'https://paddy-seed-quality-assessment-and.onrender.com';
+  /// Plant Disease Render Service URL
+  /// Update this after creating the new Render service
+  static const String plantDiseaseUrl =
+      'https://paddy-plant-disease.onrender.com';
+
+  /// Paddy Classification Render Service URL
+  /// Update this after creating the new Render service
+  static const String paddyClassificationUrl =
+      'https://paddy-classification.onrender.com';
 
   // ============================================================
-  // WARM UP SERVER (RENDER COLD START MITIGATION)
+  // WARM UP BOTH SERVERS (RENDER COLD START MITIGATION)
   // ============================================================
 
   static void warmUpServer() {
     try {
-      http.get(Uri.parse('$renderBaseUrl/health')).timeout(
+      http.get(Uri.parse('$plantDiseaseUrl/health')).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => http.Response('', 408),
+      ).catchError((_) => http.Response('', 500));
+
+      http.get(Uri.parse('$paddyClassificationUrl/health')).timeout(
         const Duration(seconds: 15),
         onTimeout: () => http.Response('', 408),
       ).catchError((_) => http.Response('', 500));
@@ -346,11 +359,28 @@ class _PlantDiseaseInputPageState
 
   Future<Map<String, dynamic>> _sendToRender() async {
     final Uri url = Uri.parse(
-      '${InputPage.renderBaseUrl}/predict/plant-disease',
+      '${InputPage.plantDiseaseUrl}/predict',
     );
 
     const int maxAttempts = 2;
     http.Response? response;
+
+    // Compress image before sending (fixes large image 502 errors)
+    Uint8List imageBytes;
+    try {
+      final Uint8List? compressed = await FlutterImageCompress.compressWithFile(
+        widget.imageFile.absolute.path,
+        minWidth: 800,
+        minHeight: 800,
+        quality: 80,
+        format: CompressFormat.jpeg,
+      );
+      imageBytes = compressed ?? await widget.imageFile.readAsBytes();
+    } catch (_) {
+      imageBytes = await widget.imageFile.readAsBytes();
+    }
+
+    debugPrint('Compressed image size: ${imageBytes.length ~/ 1024}KB');
 
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -360,15 +390,16 @@ class _PlantDiseaseInputPageState
         );
 
         request.files.add(
-          await http.MultipartFile.fromPath(
+          http.MultipartFile.fromBytes(
             'image',
-            widget.imageFile.path,
+            imageBytes,
+            filename: 'image.jpg',
           ),
         );
 
         final http.StreamedResponse streamedResponse =
             await request.send().timeout(
-          const Duration(seconds: 45),
+          const Duration(seconds: 120),
         );
 
         response = await http.Response.fromStream(
@@ -1472,11 +1503,28 @@ class _PaddyClassificationInputPageState
 
   Future<Map<String, dynamic>> _sendToRender() async {
     final Uri url = Uri.parse(
-      '${InputPage.renderBaseUrl}/predict/paddy-classification',
+      '${InputPage.paddyClassificationUrl}/predict',
     );
 
     const int maxAttempts = 2;
     http.Response? response;
+
+    // Compress image before sending (fixes large image 502 errors)
+    Uint8List imageBytes;
+    try {
+      final Uint8List? compressed = await FlutterImageCompress.compressWithFile(
+        widget.imageFile.absolute.path,
+        minWidth: 800,
+        minHeight: 800,
+        quality: 80,
+        format: CompressFormat.jpeg,
+      );
+      imageBytes = compressed ?? await widget.imageFile.readAsBytes();
+    } catch (_) {
+      imageBytes = await widget.imageFile.readAsBytes();
+    }
+
+    debugPrint('Compressed image size: ${imageBytes.length ~/ 1024}KB');
 
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -1486,15 +1534,16 @@ class _PaddyClassificationInputPageState
         );
 
         request.files.add(
-          await http.MultipartFile.fromPath(
+          http.MultipartFile.fromBytes(
             'image',
-            widget.imageFile.path,
+            imageBytes,
+            filename: 'image.jpg',
           ),
         );
 
         final http.StreamedResponse streamedResponse =
             await request.send().timeout(
-          const Duration(seconds: 45),
+          const Duration(seconds: 120),
         );
 
         response = await http.Response.fromStream(

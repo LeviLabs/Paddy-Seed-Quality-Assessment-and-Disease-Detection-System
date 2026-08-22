@@ -37,9 +37,10 @@ dependencies:
   # State Management
   provider: ^6.1.5+1
 
-  # Image Picker
+  # Image Picker & Compression
   camera: ^0.11.2
   image_picker: ^1.2.3
+  flutter_image_compress: ^2.3.0
 
   # HTTP Requests
   http: ^1.6.0
