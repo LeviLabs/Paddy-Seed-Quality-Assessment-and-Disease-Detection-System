@@ -12,6 +12,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from keras.models import load_model
+from keras.applications.mobilenet_v2 import preprocess_input
 
 app = Flask(__name__)
 CORS(app)
@@ -53,6 +54,7 @@ def preprocess_image_bytes(file_bytes, target_size=(224, 224)):
     image = image.resize(target_size, Image.Resampling.BILINEAR)
     img_array = np.asarray(image, dtype=np.float32)
     img_array = np.expand_dims(img_array, axis=0)
+    img_array = preprocess_input(img_array)
     return img_array
 
 @app.route('/', methods=['GET'])
