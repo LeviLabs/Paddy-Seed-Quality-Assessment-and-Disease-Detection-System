@@ -1,0 +1,5 @@
+﻿paddy_convnext_tiny_deployment*
+*.pyc
+__pycache__/
+venv/
+.venv/
