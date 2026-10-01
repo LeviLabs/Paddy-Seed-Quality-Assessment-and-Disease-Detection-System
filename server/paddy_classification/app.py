@@ -63,7 +63,7 @@ CONFIG_PATH = os.path.join(
 
 
 # ============================================================
-# DEBUG PATHS
+# DEBUG PATH INFORMATION
 # ============================================================
 
 print()
@@ -116,7 +116,7 @@ print()
 
 
 # ============================================================
-# DEFAULT CLASSES
+# DEFAULT CLASS NAMES
 # ============================================================
 
 DEFAULT_CLASSES = [
@@ -149,29 +149,29 @@ def load_class_names():
 
                 data = json.load(f)
 
-            # --------------------------------------------
-            # JSON format:
+            # =================================================
+            # FORMAT 1
             #
             # [
             #   "Aumithri",
             #   "Bpt",
             #   ...
             # ]
-            # --------------------------------------------
+            # =================================================
 
             if isinstance(data, list):
 
                 return data
 
-            # --------------------------------------------
-            # JSON format:
+            # =================================================
+            # FORMAT 2
             #
             # {
             #   "0": "Aumithri",
             #   "1": "Bpt",
             #   ...
             # }
-            # --------------------------------------------
+            # =================================================
 
             elif isinstance(data, dict):
 
@@ -195,8 +195,7 @@ def load_class_names():
             )
 
     print(
-        'Using DEFAULT_CLASSES because '
-        'class_names.json could not be loaded.'
+        'Using default class names.'
     )
 
     return DEFAULT_CLASSES
@@ -215,11 +214,15 @@ print(
 
 
 # ============================================================
-# LOAD MODEL
+# GLOBAL MODEL VARIABLE
 # ============================================================
 
 _model = None
 
+
+# ============================================================
+# LOAD MODEL
+# ============================================================
 
 def get_model():
 
@@ -229,24 +232,24 @@ def get_model():
 
         print()
         print(
-            '=============================================='
+            "=============================================="
         )
 
         print(
-            'LOADING PADDY MODEL'
+            "LOADING PADDY MODEL"
         )
 
         print(
-            '=============================================='
+            "=============================================="
         )
 
         print(
             f'Model path: {MODEL_PATH}'
         )
 
-        # --------------------------------------------
-        # Check model file
-        # --------------------------------------------
+        # ====================================================
+        # CHECK FILE
+        # ====================================================
 
         if not os.path.isfile(MODEL_PATH):
 
@@ -254,23 +257,58 @@ def get_model():
                 f'Model file not found: {MODEL_PATH}'
             )
 
-        # --------------------------------------------
-        # Load Keras model
-        # --------------------------------------------
+        # ====================================================
+        # LOAD MODEL
+        #
+        # safe_mode=False is required because your model
+        # contains a Lambda layer.
+        # ====================================================
 
-        _model = tf.keras.models.load_model(
-            MODEL_PATH,
-            compile=False
-        )
+        try:
+
+            _model = tf.keras.models.load_model(
+                MODEL_PATH,
+                compile=False,
+                safe_mode=False
+            )
+
+        except TypeError as e:
+
+            print(
+                'safe_mode parameter not supported.'
+            )
+
+            print(
+                'Trying unsafe deserialization fallback...'
+            )
+
+            try:
+
+                import keras
+
+                keras.config.enable_unsafe_deserialization()
+
+                _model = tf.keras.models.load_model(
+                    MODEL_PATH,
+                    compile=False
+                )
+
+            except Exception:
+
+                raise e
+
+        # ====================================================
+        # MODEL LOADED
+        # ====================================================
 
         print(
             'Paddy ConvNeXt-Tiny model '
             'loaded successfully.'
         )
 
-        # --------------------------------------------
-        # Input shape
-        # --------------------------------------------
+        # ====================================================
+        # INPUT SHAPE
+        # ====================================================
 
         try:
 
@@ -282,13 +320,13 @@ def get_model():
         except Exception as e:
 
             print(
-                'Unable to read input shape:',
+                'Unable to read model input shape:',
                 e
             )
 
-        # --------------------------------------------
-        # Output shape
-        # --------------------------------------------
+        # ====================================================
+        # OUTPUT SHAPE
+        # ====================================================
 
         try:
 
@@ -300,20 +338,21 @@ def get_model():
         except Exception as e:
 
             print(
-                'Unable to read output shape:',
+                'Unable to read model output shape:',
                 e
             )
 
         print(
-            '=============================================='
+            "=============================================="
         )
+
         print()
 
     return _model
 
 
 # ============================================================
-# IMAGE LIMIT
+# IMAGE SIZE LIMIT
 # ============================================================
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -328,9 +367,9 @@ def preprocess_image_bytes(
     target_size=(320, 320)
 ):
 
-    # --------------------------------------------
-    # Open image
-    # --------------------------------------------
+    # ========================================================
+    # OPEN IMAGE
+    # ========================================================
 
     image = Image.open(
         io.BytesIO(file_bytes)
@@ -346,80 +385,79 @@ def preprocess_image_bytes(
         image.mode
     )
 
-    # --------------------------------------------
-    # Convert to RGB
-    # --------------------------------------------
+
+    # ========================================================
+    # CONVERT RGB
+    # ========================================================
 
     image = image.convert(
         'RGB'
     )
 
-    # --------------------------------------------
-    # Resize
-    # --------------------------------------------
+
+    # ========================================================
+    # RESIZE
+    # ========================================================
 
     image = image.resize(
         target_size,
         Image.Resampling.BILINEAR
     )
 
-    # --------------------------------------------
-    # Convert to NumPy
-    # --------------------------------------------
+
+    # ========================================================
+    # NUMPY ARRAY
+    # ========================================================
 
     img_array = np.asarray(
         image,
         dtype=np.float32
     )
 
-    print(
-        'Before ConvNeXt preprocessing:'
-    )
 
     print(
-        'Min:',
+        'Image min before preprocessing:',
         float(np.min(img_array))
     )
 
     print(
-        'Max:',
+        'Image max before preprocessing:',
         float(np.max(img_array))
     )
 
-    # --------------------------------------------
-    # Add batch dimension
+
+    # ========================================================
+    # ADD BATCH DIMENSION
     #
     # (320,320,3)
     #
-    # becomes
+    # ->
     #
     # (1,320,320,3)
-    # --------------------------------------------
+    # ========================================================
 
     img_array = np.expand_dims(
         img_array,
         axis=0
     )
 
-    # --------------------------------------------
-    # ConvNeXt preprocessing
-    # --------------------------------------------
+
+    # ========================================================
+    # CONVNEXT PREPROCESSING
+    # ========================================================
 
     img_array = preprocess_input(
         img_array
     )
 
-    print(
-        'After ConvNeXt preprocessing:'
-    )
 
     print(
-        'Min:',
+        'Image min after preprocessing:',
         float(np.min(img_array))
     )
 
     print(
-        'Max:',
+        'Image max after preprocessing:',
         float(np.max(img_array))
     )
 
@@ -428,20 +466,21 @@ def preprocess_image_bytes(
         img_array.shape
     )
 
+
     return img_array
 
 
 # ============================================================
-# CONVERT OUTPUT TO NUMPY
+# EXTRACT MODEL OUTPUT
 # ============================================================
 
 def extract_model_output(
     predictions
 ):
 
-    # --------------------------------------------
-    # If model returns dictionary
-    # --------------------------------------------
+    # ========================================================
+    # DICTIONARY OUTPUT
+    # ========================================================
 
     if isinstance(
         predictions,
@@ -449,7 +488,7 @@ def extract_model_output(
     ):
 
         print(
-            'Model returned dictionary.'
+            'Model returned dictionary output.'
         )
 
         print(
@@ -465,9 +504,10 @@ def extract_model_output(
             first_key
         ]
 
-    # --------------------------------------------
-    # If model returns list
-    # --------------------------------------------
+
+    # ========================================================
+    # LIST / TUPLE OUTPUT
+    # ========================================================
 
     elif isinstance(
         predictions,
@@ -475,14 +515,15 @@ def extract_model_output(
     ):
 
         print(
-            'Model returned list/tuple.'
+            'Model returned list/tuple output.'
         )
 
         predictions = predictions[0]
 
-    # --------------------------------------------
-    # Tensor -> NumPy
-    # --------------------------------------------
+
+    # ========================================================
+    # TENSOR -> NUMPY
+    # ========================================================
 
     if tf.is_tensor(
         predictions
@@ -490,32 +531,32 @@ def extract_model_output(
 
         predictions = predictions.numpy()
 
-    # --------------------------------------------
-    # Convert to NumPy
-    # --------------------------------------------
 
     predictions = np.asarray(
         predictions
     )
 
+
     print(
-        'Prediction array shape:',
+        'Prediction output shape:',
         predictions.shape
     )
 
-    # --------------------------------------------
-    # Remove batch dimension
-    # --------------------------------------------
+
+    # ========================================================
+    # REMOVE BATCH DIMENSION
+    # ========================================================
 
     if predictions.ndim > 1:
 
         predictions = predictions[0]
 
+
     return predictions
 
 
 # ============================================================
-# CONVERT MODEL OUTPUT TO PROBABILITIES
+# CONVERT OUTPUT TO PROBABILITIES
 # ============================================================
 
 def convert_to_probabilities(
@@ -527,9 +568,10 @@ def convert_to_probabilities(
         dtype=np.float32
     )
 
-    # --------------------------------------------
-    # Replace NaN / Inf
-    # --------------------------------------------
+
+    # ========================================================
+    # REMOVE NAN / INF
+    # ========================================================
 
     values = np.nan_to_num(
         values,
@@ -537,6 +579,7 @@ def convert_to_probabilities(
         posinf=0.0,
         neginf=0.0
     )
+
 
     output_sum = float(
         np.sum(values)
@@ -549,6 +592,7 @@ def convert_to_probabilities(
     output_max = float(
         np.max(values)
     )
+
 
     print(
         'Raw output sum:',
@@ -565,11 +609,12 @@ def convert_to_probabilities(
         output_max
     )
 
-    # ====================================================
+
+    # ========================================================
     # CASE 1
     #
-    # Already probabilities
-    # ====================================================
+    # MODEL ALREADY RETURNS PROBABILITIES
+    # ========================================================
 
     if (
         np.all(values >= 0)
@@ -584,30 +629,32 @@ def convert_to_probabilities(
     ):
 
         print(
-            'Output detected as probabilities.'
+            'Model output detected as probabilities.'
         )
 
         probabilities = values
 
-    # ====================================================
+
+    # ========================================================
     # CASE 2
     #
-    # Logits -> Softmax
-    # ====================================================
+    # MODEL RETURNS LOGITS
+    # ========================================================
 
     else:
 
         print(
-            'Output detected as logits.'
+            'Model output detected as logits.'
         )
 
         print(
-            'Applying softmax.'
+            'Applying softmax...'
         )
 
         probabilities = tf.nn.softmax(
             values
         ).numpy()
+
 
     return probabilities
 
@@ -703,9 +750,86 @@ def health():
         'class_names_exists':
             os.path.isfile(
                 JSON_PATH
+            ),
+
+        'config_path':
+            CONFIG_PATH,
+
+        'config_exists':
+            os.path.isfile(
+                CONFIG_PATH
             )
 
     })
+
+
+# ============================================================
+# MODEL STATUS ENDPOINT
+# ============================================================
+
+@app.route(
+    '/model-status',
+    methods=['GET']
+)
+def model_status():
+
+    try:
+
+        model = get_model()
+
+        return jsonify({
+
+            'success':
+                True,
+
+            'model_loaded':
+                True,
+
+            'model_exists':
+                os.path.isfile(
+                    MODEL_PATH
+                ),
+
+            'model_path':
+                MODEL_PATH,
+
+            'input_shape':
+                str(
+                    model.input_shape
+                ),
+
+            'output_shape':
+                str(
+                    model.output_shape
+                ),
+
+            'classes':
+                CLASSES
+
+        })
+
+    except Exception as e:
+
+        return jsonify({
+
+            'success':
+                False,
+
+            'model_loaded':
+                False,
+
+            'model_exists':
+                os.path.isfile(
+                    MODEL_PATH
+                ),
+
+            'model_path':
+                MODEL_PATH,
+
+            'error':
+                str(e)
+
+        }), 500
 
 
 # ============================================================
@@ -719,7 +843,7 @@ def health():
 def predict():
 
     # ========================================================
-    # CHECK IMAGE
+    # CHECK IMAGE FIELD
     # ========================================================
 
     if 'image' not in request.files:
@@ -758,11 +882,15 @@ def predict():
 
 
     # ========================================================
-    # READ IMAGE
+    # READ FILE
     # ========================================================
 
     file_bytes = file.read()
 
+
+    # ========================================================
+    # EMPTY IMAGE
+    # ========================================================
 
     if not file_bytes:
 
@@ -778,7 +906,7 @@ def predict():
 
 
     # ========================================================
-    # IMAGE SIZE LIMIT
+    # CHECK IMAGE SIZE
     # ========================================================
 
     if len(file_bytes) > MAX_IMAGE_BYTES:
@@ -791,9 +919,9 @@ def predict():
             'error':
                 (
                     'Image too large. '
-                    'Maximum size is 5MB. '
+                    'Maximum allowed size is 5MB. '
                     f'Uploaded size: '
-                    f'{len(file_bytes) // 1024}KB.'
+                    f'{len(file_bytes) // 1024} KB.'
                 )
 
         }), 400
@@ -803,15 +931,15 @@ def predict():
 
         print()
         print(
-            '=============================================='
+            "=============================================="
         )
 
         print(
-            'NEW PADDY CLASSIFICATION REQUEST'
+            "NEW PADDY CLASSIFICATION REQUEST"
         )
 
         print(
-            '=============================================='
+            "=============================================="
         )
 
         print(
@@ -820,8 +948,9 @@ def predict():
         )
 
         print(
-            'Image bytes:',
-            len(file_bytes)
+            'Image size:',
+            len(file_bytes),
+            'bytes'
         )
 
 
@@ -864,13 +993,13 @@ def predict():
 
 
         # ====================================================
-        # MODEL INFERENCE
+        # RUN MODEL
         # ====================================================
 
-        print()
         print(
             'Running model inference...'
         )
+
 
         predictions = model(
             input_tensor,
@@ -879,7 +1008,7 @@ def predict():
 
 
         # ====================================================
-        # EXTRACT OUTPUT
+        # EXTRACT MODEL OUTPUT
         # ====================================================
 
         raw_output = extract_model_output(
@@ -912,7 +1041,7 @@ def predict():
 
 
         # ====================================================
-        # CHECK OUTPUT SIZE
+        # CHECK OUTPUT CLASS COUNT
         # ====================================================
 
         if len(raw_output) != len(CLASSES):
@@ -950,7 +1079,7 @@ def predict():
 
 
         # ====================================================
-        # FINAL PREDICTION
+        # TOP CLASS
         # ====================================================
 
         top_index = int(
@@ -967,6 +1096,10 @@ def predict():
         )
 
 
+        # ====================================================
+        # VARIETY NAME
+        # ====================================================
+
         if top_index < len(CLASSES):
 
             variety_name = CLASSES[
@@ -979,7 +1112,7 @@ def predict():
 
 
         # ====================================================
-        # ALL PREDICTIONS
+        # ALL CLASS PREDICTIONS
         # ====================================================
 
         predictions_map = {}
@@ -1011,7 +1144,7 @@ def predict():
 
 
         # ====================================================
-        # SORT PREDICTIONS
+        # SORT RESULTS
         # ====================================================
 
         sorted_predictions = sorted(
@@ -1020,6 +1153,10 @@ def predict():
             reverse=True
         )
 
+
+        # ====================================================
+        # PRINT FINAL RESULT
+        # ====================================================
 
         print()
         print(
@@ -1049,11 +1186,13 @@ def predict():
             'All predictions:'
         )
 
+
         for name, probability in sorted_predictions:
 
             print(
                 f'{name}: {probability}%'
             )
+
 
         print(
             '======================================'
@@ -1063,7 +1202,7 @@ def predict():
 
 
         # ====================================================
-        # RESPONSE
+        # API RESPONSE
         # ====================================================
 
         return jsonify({
@@ -1107,13 +1246,17 @@ def predict():
 
 
     # ========================================================
-    # MODEL FILE MISSING
+    # MODEL NOT FOUND
     # ========================================================
 
     except FileNotFoundError as e:
 
+        print()
         print(
-            'MODEL FILE ERROR:',
+            'MODEL FILE ERROR:'
+        )
+
+        print(
             str(e)
         )
 
@@ -1148,16 +1291,19 @@ def predict():
         )
 
         print(
+            'Error type:',
             type(e).__name__
         )
 
         print(
+            'Error:',
             str(e)
         )
 
         print(
             '======================================'
         )
+
 
         return jsonify({
 
@@ -1183,9 +1329,15 @@ if __name__ == '__main__':
         )
     )
 
+
+    print()
     print(
-        f'Starting server on port {port}'
+        f'Starting Paddy Classification server '
+        f'on port {port}'
     )
+
+    print()
+
 
     app.run(
         host='0.0.0.0',
