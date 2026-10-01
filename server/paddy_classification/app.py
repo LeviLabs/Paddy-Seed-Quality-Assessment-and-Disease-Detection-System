@@ -1,14 +1,15 @@
 import io
 import os
 import json
+import traceback
 
 # ============================================================
 # TENSORFLOW SETTINGS
 # ============================================================
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
 # ============================================================
@@ -43,33 +44,33 @@ BASE_DIR = os.path.dirname(
 
 MODEL_DIR = os.path.join(
     BASE_DIR,
-    'models'
+    "models"
 )
 
-MODEL_PATH = os.path.join(
+SAVED_MODEL_PATH = os.path.join(
     MODEL_DIR,
-    'paddy_convnext_tiny.keras'
+    "saved_model"
 )
 
 JSON_PATH = os.path.join(
     MODEL_DIR,
-    'class_names.json'
+    "class_names.json"
 )
 
 CONFIG_PATH = os.path.join(
     MODEL_DIR,
-    'model_config.json'
+    "model_config.json"
 )
 
 
 # ============================================================
-# DEBUG PATH INFORMATION
+# DEBUG PATHS
 # ============================================================
 
 print()
-print("==============================================")
-print("PADDY CLASSIFICATION SERVER")
-print("==============================================")
+print("================================================")
+print("PADDY CLASSIFICATION SERVER STARTING")
+print("================================================")
 
 print(
     "BASE_DIR:",
@@ -82,17 +83,17 @@ print(
 )
 
 print(
-    "MODEL_PATH:",
-    MODEL_PATH
+    "SAVED_MODEL_PATH:",
+    SAVED_MODEL_PATH
 )
 
 print(
-    "MODEL EXISTS:",
-    os.path.isfile(MODEL_PATH)
+    "SAVED MODEL EXISTS:",
+    os.path.isdir(SAVED_MODEL_PATH)
 )
 
 print(
-    "CLASS JSON PATH:",
+    "CLASS JSON:",
     JSON_PATH
 )
 
@@ -102,7 +103,7 @@ print(
 )
 
 print(
-    "CONFIG PATH:",
+    "CONFIG:",
     CONFIG_PATH
 )
 
@@ -111,23 +112,23 @@ print(
     os.path.isfile(CONFIG_PATH)
 )
 
-print("==============================================")
+print("================================================")
 print()
 
 
 # ============================================================
-# DEFAULT CLASS NAMES
+# DEFAULT CLASSES
 # ============================================================
 
 DEFAULT_CLASSES = [
-    'Aumithri',
-    'Bpt',
-    'Hmt',
-    'Ir_64',
-    'Mota_Mahamaya',
-    'Mota_Paan',
-    'Rb_Gold',
-    'Sarna'
+    "Aumithri",
+    "Bpt",
+    "Hmt",
+    "Ir_64",
+    "Mota_Mahamaya",
+    "Mota_Paan",
+    "Rb_Gold",
+    "Sarna"
 ]
 
 
@@ -143,59 +144,75 @@ def load_class_names():
 
             with open(
                 JSON_PATH,
-                'r',
-                encoding='utf-8'
+                "r",
+                encoding="utf-8"
             ) as f:
 
                 data = json.load(f)
 
-            # =================================================
-            # FORMAT 1
+            # ----------------------------------------
+            # Format:
             #
             # [
             #   "Aumithri",
             #   "Bpt",
             #   ...
             # ]
-            # =================================================
+            # ----------------------------------------
 
             if isinstance(data, list):
 
+                print(
+                    "Class names loaded from list."
+                )
+
                 return data
 
-            # =================================================
-            # FORMAT 2
+            # ----------------------------------------
+            # Format:
             #
             # {
             #   "0": "Aumithri",
-            #   "1": "Bpt",
-            #   ...
+            #   "1": "Bpt"
             # }
-            # =================================================
+            # ----------------------------------------
 
-            elif isinstance(data, dict):
+            if isinstance(data, dict):
 
                 try:
 
-                    return [
+                    classes = [
                         data[str(i)]
                         for i in range(len(data))
                     ]
 
+                    print(
+                        "Class names loaded from indexed dictionary."
+                    )
+
+                    return classes
+
                 except Exception:
 
-                    return list(
+                    classes = list(
                         data.values()
                     )
+
+                    print(
+                        "Class names loaded from dictionary values."
+                    )
+
+                    return classes
 
         except Exception as e:
 
             print(
-                f'Warning loading class names: {e}'
+                "ERROR loading class_names.json:",
+                str(e)
             )
 
     print(
-        'Using default class names.'
+        "Using DEFAULT_CLASSES."
     )
 
     return DEFAULT_CLASSES
@@ -205,7 +222,7 @@ CLASSES = load_class_names()
 
 
 print(
-    f'Loaded {len(CLASSES)} paddy classes:'
+    f"Loaded {len(CLASSES)} classes:"
 )
 
 print(
@@ -214,148 +231,200 @@ print(
 
 
 # ============================================================
-# GLOBAL MODEL VARIABLE
+# SAVED MODEL VARIABLES
 # ============================================================
 
 _model = None
+_model_infer_fn = None
+_model_input_name = None
 
 
 # ============================================================
-# LOAD MODEL
+# LOAD SAVED MODEL
 # ============================================================
 
-def get_model():
+def get_infer_fn():
 
     global _model
+    global _model_infer_fn
+    global _model_input_name
 
-    if _model is None:
+    if _model_infer_fn is None:
 
         print()
         print(
-            "=============================================="
+            "================================================"
         )
 
         print(
-            "LOADING PADDY MODEL"
+            "LOADING PADDY SAVED MODEL"
         )
 
         print(
-            "=============================================="
+            "================================================"
         )
 
         print(
-            f'Model path: {MODEL_PATH}'
+            "Model path:",
+            SAVED_MODEL_PATH
+        )
+
+        print(
+            "Model folder exists:",
+            os.path.isdir(SAVED_MODEL_PATH)
         )
 
         # ====================================================
-        # CHECK FILE
+        # CHECK FOLDER
         # ====================================================
 
-        if not os.path.isfile(MODEL_PATH):
+        if not os.path.isdir(SAVED_MODEL_PATH):
 
             raise FileNotFoundError(
-                f'Model file not found: {MODEL_PATH}'
+                f"SavedModel directory not found: "
+                f"{SAVED_MODEL_PATH}"
+            )
+
+        # ====================================================
+        # CHECK saved_model.pb
+        # ====================================================
+
+        saved_model_pb = os.path.join(
+            SAVED_MODEL_PATH,
+            "saved_model.pb"
+        )
+
+        print(
+            "saved_model.pb:",
+            saved_model_pb
+        )
+
+        print(
+            "saved_model.pb exists:",
+            os.path.isfile(saved_model_pb)
+        )
+
+        if not os.path.isfile(saved_model_pb):
+
+            raise FileNotFoundError(
+                f"saved_model.pb not found inside: "
+                f"{SAVED_MODEL_PATH}"
             )
 
         # ====================================================
         # LOAD MODEL
-        #
-        # safe_mode=False is required because your model
-        # contains a Lambda layer.
-        # ====================================================
-
-        try:
-
-            _model = tf.keras.models.load_model(
-                MODEL_PATH,
-                compile=False,
-                safe_mode=False
-            )
-
-        except TypeError as e:
-
-            print(
-                'safe_mode parameter not supported.'
-            )
-
-            print(
-                'Trying unsafe deserialization fallback...'
-            )
-
-            try:
-
-                import keras
-
-                keras.config.enable_unsafe_deserialization()
-
-                _model = tf.keras.models.load_model(
-                    MODEL_PATH,
-                    compile=False
-                )
-
-            except Exception:
-
-                raise e
-
-        # ====================================================
-        # MODEL LOADED
         # ====================================================
 
         print(
-            'Paddy ConvNeXt-Tiny model '
-            'loaded successfully.'
+            "Loading TensorFlow SavedModel..."
+        )
+
+        _model = tf.saved_model.load(
+            SAVED_MODEL_PATH
+        )
+
+        print(
+            "TensorFlow SavedModel loaded."
         )
 
         # ====================================================
-        # INPUT SHAPE
+        # GET SIGNATURES
         # ====================================================
 
-        try:
+        signatures = list(
+            _model.signatures.keys()
+        )
 
-            print(
-                'Model input shape:',
-                _model.input_shape
+        print(
+            "Available signatures:",
+            signatures
+        )
+
+        if "serving_default" not in _model.signatures:
+
+            raise RuntimeError(
+                "SavedModel does not contain "
+                "'serving_default' signature. "
+                f"Available signatures: {signatures}"
             )
 
-        except Exception as e:
-
-            print(
-                'Unable to read model input shape:',
-                e
-            )
+        _model_infer_fn = (
+            _model.signatures[
+                "serving_default"
+            ]
+        )
 
         # ====================================================
-        # OUTPUT SHAPE
+        # PRINT INPUT SIGNATURE
         # ====================================================
 
-        try:
+        print(
+            "Structured input signature:"
+        )
+
+        print(
+            _model_infer_fn.structured_input_signature
+        )
+
+        print(
+            "Structured outputs:"
+        )
+
+        print(
+            _model_infer_fn.structured_outputs
+        )
+
+        # ====================================================
+        # DETECT INPUT NAME
+        # ====================================================
+
+        args_signature, kwargs_signature = (
+            _model_infer_fn.structured_input_signature
+        )
+
+        if kwargs_signature:
+
+            _model_input_name = list(
+                kwargs_signature.keys()
+            )[0]
 
             print(
-                'Model output shape:',
-                _model.output_shape
+                "Detected model input name:",
+                _model_input_name
             )
 
-        except Exception as e:
+        else:
+
+            _model_input_name = None
 
             print(
-                'Unable to read model output shape:',
-                e
+                "Model appears to use positional input."
             )
 
         print(
-            "=============================================="
+            "================================================"
+        )
+
+        print(
+            "MODEL LOADED SUCCESSFULLY"
+        )
+
+        print(
+            "================================================"
         )
 
         print()
 
-    return _model
+    return _model_infer_fn
 
 
 # ============================================================
-# IMAGE SIZE LIMIT
+# IMAGE LIMIT
 # ============================================================
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BYTES = (
+    5 * 1024 * 1024
+)
 
 
 # ============================================================
@@ -376,24 +445,22 @@ def preprocess_image_bytes(
     )
 
     print(
-        'Original image size:',
+        "Original image size:",
         image.size
     )
 
     print(
-        'Original image mode:',
+        "Original image mode:",
         image.mode
     )
 
-
     # ========================================================
-    # CONVERT RGB
+    # RGB
     # ========================================================
 
     image = image.convert(
-        'RGB'
+        "RGB"
     )
-
 
     # ========================================================
     # RESIZE
@@ -404,7 +471,6 @@ def preprocess_image_bytes(
         Image.Resampling.BILINEAR
     )
 
-
     # ========================================================
     # NUMPY ARRAY
     # ========================================================
@@ -414,33 +480,28 @@ def preprocess_image_bytes(
         dtype=np.float32
     )
 
-
     print(
-        'Image min before preprocessing:',
-        float(np.min(img_array))
+        "Before preprocessing min:",
+        float(
+            np.min(img_array)
+        )
     )
 
     print(
-        'Image max before preprocessing:',
-        float(np.max(img_array))
+        "Before preprocessing max:",
+        float(
+            np.max(img_array)
+        )
     )
-
 
     # ========================================================
     # ADD BATCH DIMENSION
-    #
-    # (320,320,3)
-    #
-    # ->
-    #
-    # (1,320,320,3)
     # ========================================================
 
     img_array = np.expand_dims(
         img_array,
         axis=0
     )
-
 
     # ========================================================
     # CONVNEXT PREPROCESSING
@@ -450,109 +511,192 @@ def preprocess_image_bytes(
         img_array
     )
 
-
     print(
-        'Image min after preprocessing:',
-        float(np.min(img_array))
+        "After preprocessing min:",
+        float(
+            np.min(img_array)
+        )
     )
 
     print(
-        'Image max after preprocessing:',
-        float(np.max(img_array))
+        "After preprocessing max:",
+        float(
+            np.max(img_array)
+        )
     )
 
     print(
-        'Final input shape:',
+        "Final image shape:",
         img_array.shape
     )
-
 
     return img_array
 
 
 # ============================================================
-# EXTRACT MODEL OUTPUT
+# RUN MODEL INFERENCE
 # ============================================================
 
-def extract_model_output(
-    predictions
+def run_inference(
+    input_tensor
 ):
+
+    global _model_input_name
+
+    infer_fn = get_infer_fn()
+
+    print(
+        "Running SavedModel inference..."
+    )
+
+    # ========================================================
+    # NAMED INPUT
+    # ========================================================
+
+    if _model_input_name:
+
+        print(
+            "Using named input:",
+            _model_input_name
+        )
+
+        predictions_dict = infer_fn(
+            **{
+                _model_input_name:
+                    input_tensor
+            }
+        )
+
+    # ========================================================
+    # POSITIONAL INPUT
+    # ========================================================
+
+    else:
+
+        predictions_dict = infer_fn(
+            input_tensor
+        )
+
+    return predictions_dict
+
+
+# ============================================================
+# EXTRACT OUTPUT
+# ============================================================
+
+def extract_raw_output(
+    predictions_dict
+):
+
+    print()
+    print(
+        "========== MODEL OUTPUT =========="
+    )
 
     # ========================================================
     # DICTIONARY OUTPUT
     # ========================================================
 
     if isinstance(
-        predictions,
+        predictions_dict,
         dict
     ):
 
-        print(
-            'Model returned dictionary output.'
+        output_keys = list(
+            predictions_dict.keys()
         )
 
         print(
-            'Output keys:',
-            list(predictions.keys())
+            "Output keys:",
+            output_keys
         )
 
-        first_key = list(
-            predictions.keys()
-        )[0]
+        if not output_keys:
 
-        predictions = predictions[
-            first_key
-        ]
+            raise RuntimeError(
+                "Model returned an empty output dictionary."
+            )
 
+        output_key = output_keys[0]
+
+        output_tensor = (
+            predictions_dict[
+                output_key
+            ]
+        )
+
+        print(
+            "Selected output key:",
+            output_key
+        )
 
     # ========================================================
-    # LIST / TUPLE OUTPUT
+    # TENSOR OUTPUT
     # ========================================================
 
-    elif isinstance(
-        predictions,
-        (list, tuple)
-    ):
+    else:
 
-        print(
-            'Model returned list/tuple output.'
-        )
-
-        predictions = predictions[0]
-
+        output_tensor = predictions_dict
 
     # ========================================================
     # TENSOR -> NUMPY
     # ========================================================
 
     if tf.is_tensor(
-        predictions
+        output_tensor
     ):
 
-        predictions = predictions.numpy()
+        print(
+            "Output tensor shape:",
+            output_tensor.shape
+        )
 
+        output_array = (
+            output_tensor.numpy()
+        )
 
-    predictions = np.asarray(
-        predictions
-    )
+    else:
 
+        output_array = np.asarray(
+            output_tensor
+        )
 
     print(
-        'Prediction output shape:',
-        predictions.shape
+        "Output array shape:",
+        output_array.shape
     )
 
-
     # ========================================================
-    # REMOVE BATCH DIMENSION
+    # REMOVE BATCH
     # ========================================================
 
-    if predictions.ndim > 1:
+    if output_array.ndim > 1:
 
-        predictions = predictions[0]
+        raw_output = (
+            output_array[0]
+        )
 
+    else:
 
-    return predictions
+        raw_output = (
+            output_array
+        )
+
+    raw_output = np.asarray(
+        raw_output,
+        dtype=np.float32
+    )
+
+    print(
+        "Raw output:",
+        raw_output
+    )
+
+    print(
+        "=================================="
+    )
+
+    return raw_output
 
 
 # ============================================================
@@ -568,9 +712,8 @@ def convert_to_probabilities(
         dtype=np.float32
     )
 
-
     # ========================================================
-    # REMOVE NAN / INF
+    # CLEAN VALUES
     # ========================================================
 
     values = np.nan_to_num(
@@ -579,7 +722,6 @@ def convert_to_probabilities(
         posinf=0.0,
         neginf=0.0
     )
-
 
     output_sum = float(
         np.sum(values)
@@ -593,27 +735,23 @@ def convert_to_probabilities(
         np.max(values)
     )
 
-
     print(
-        'Raw output sum:',
+        "Raw output sum:",
         output_sum
     )
 
     print(
-        'Raw output min:',
+        "Raw output min:",
         output_min
     )
 
     print(
-        'Raw output max:',
+        "Raw output max:",
         output_max
     )
 
-
     # ========================================================
-    # CASE 1
-    #
-    # MODEL ALREADY RETURNS PROBABILITIES
+    # ALREADY PROBABILITIES
     # ========================================================
 
     if (
@@ -629,32 +767,30 @@ def convert_to_probabilities(
     ):
 
         print(
-            'Model output detected as probabilities.'
+            "Output detected as probabilities."
         )
 
         probabilities = values
 
-
     # ========================================================
-    # CASE 2
-    #
-    # MODEL RETURNS LOGITS
+    # LOGITS
     # ========================================================
 
     else:
 
         print(
-            'Model output detected as logits.'
+            "Output detected as logits."
         )
 
         print(
-            'Applying softmax...'
+            "Applying softmax..."
         )
 
-        probabilities = tf.nn.softmax(
-            values
-        ).numpy()
-
+        probabilities = (
+            tf.nn.softmax(
+                values
+            ).numpy()
+        )
 
     return probabilities
 
@@ -664,98 +800,111 @@ def convert_to_probabilities(
 # ============================================================
 
 @app.route(
-    '/',
-    methods=['GET']
+    "/",
+    methods=["GET"]
 )
 def index():
 
     return jsonify({
 
-        'success':
+        "success":
             True,
 
-        'service':
-            'Paddy ConvNeXt-Tiny Classification',
+        "service":
+            "Paddy ConvNeXt-Tiny Classification",
 
-        'architecture':
-            'ConvNeXt-Tiny',
+        "architecture":
+            "ConvNeXt-Tiny",
 
-        'input_size':
-            '320x320',
+        "input_size":
+            "320x320",
 
-        'classes':
-            CLASSES,
-
-        'total_classes':
+        "total_classes":
             len(CLASSES),
 
-        'model_file':
-            'paddy_convnext_tiny.keras',
+        "classes":
+            CLASSES,
 
-        'model_exists':
-            os.path.isfile(
-                MODEL_PATH
+        "model_type":
+            "TensorFlow SavedModel",
+
+        "saved_model_path":
+            SAVED_MODEL_PATH,
+
+        "model_exists":
+            os.path.isdir(
+                SAVED_MODEL_PATH
             ),
 
-        'endpoint':
-            'POST /predict'
+        "prediction_endpoint":
+            "POST /predict",
+
+        "health_endpoint":
+            "GET /health",
+
+        "model_status_endpoint":
+            "GET /model-status"
 
     })
 
 
 # ============================================================
-# HEALTH ENDPOINT
+# HEALTH
 # ============================================================
 
 @app.route(
-    '/health',
-    methods=['GET']
+    "/health",
+    methods=["GET"]
 )
 def health():
 
+    saved_model_pb = os.path.join(
+        SAVED_MODEL_PATH,
+        "saved_model.pb"
+    )
+
     return jsonify({
 
-        'success':
+        "success":
             True,
 
-        'status':
-            'healthy',
+        "status":
+            "healthy",
 
-        'service':
-            'paddy_classification',
+        "service":
+            "paddy_classification",
 
-        'architecture':
-            'ConvNeXt-Tiny',
+        "architecture":
+            "ConvNeXt-Tiny",
 
-        'input_size':
-            '320x320',
+        "input_size":
+            "320x320",
 
-        'classes':
-            CLASSES,
-
-        'total_classes':
+        "total_classes":
             len(CLASSES),
 
-        'model_path':
-            MODEL_PATH,
+        "classes":
+            CLASSES,
 
-        'model_exists':
-            os.path.isfile(
-                MODEL_PATH
+        "model_path":
+            SAVED_MODEL_PATH,
+
+        "model_folder_exists":
+            os.path.isdir(
+                SAVED_MODEL_PATH
             ),
 
-        'class_names_path':
-            JSON_PATH,
+        "saved_model_pb_exists":
+            os.path.isfile(
+                saved_model_pb
+            ),
 
-        'class_names_exists':
+        "class_names_exists":
             os.path.isfile(
                 JSON_PATH
             ),
 
-        'config_path':
-            CONFIG_PATH,
-
-        'config_exists':
+        "config_exists":
             os.path.isfile(
                 CONFIG_PATH
             )
@@ -764,164 +913,174 @@ def health():
 
 
 # ============================================================
-# MODEL STATUS ENDPOINT
+# MODEL STATUS
 # ============================================================
 
 @app.route(
-    '/model-status',
-    methods=['GET']
+    "/model-status",
+    methods=["GET"]
 )
 def model_status():
 
     try:
 
-        model = get_model()
+        infer_fn = get_infer_fn()
 
         return jsonify({
 
-            'success':
+            "success":
                 True,
 
-            'model_loaded':
+            "model_loaded":
                 True,
 
-            'model_exists':
-                os.path.isfile(
-                    MODEL_PATH
+            "model_folder_exists":
+                os.path.isdir(
+                    SAVED_MODEL_PATH
                 ),
 
-            'model_path':
-                MODEL_PATH,
+            "model_path":
+                SAVED_MODEL_PATH,
 
-            'input_shape':
+            "input_signature":
                 str(
-                    model.input_shape
+                    infer_fn
+                    .structured_input_signature
                 ),
 
-            'output_shape':
+            "outputs":
                 str(
-                    model.output_shape
+                    infer_fn
+                    .structured_outputs
                 ),
 
-            'classes':
+            "classes":
                 CLASSES
 
         })
 
     except Exception as e:
 
+        print(
+            "MODEL STATUS ERROR:"
+        )
+
+        print(
+            traceback.format_exc()
+        )
+
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'model_loaded':
+            "model_loaded":
                 False,
 
-            'model_exists':
-                os.path.isfile(
-                    MODEL_PATH
+            "model_folder_exists":
+                os.path.isdir(
+                    SAVED_MODEL_PATH
                 ),
 
-            'model_path':
-                MODEL_PATH,
+            "model_path":
+                SAVED_MODEL_PATH,
 
-            'error':
+            "error":
                 str(e)
 
         }), 500
 
 
 # ============================================================
-# PREDICTION ENDPOINT
+# PREDICT
 # ============================================================
 
 @app.route(
-    '/predict',
-    methods=['POST']
+    "/predict",
+    methods=["POST"]
 )
 def predict():
 
     # ========================================================
-    # CHECK IMAGE FIELD
+    # IMAGE FIELD
     # ========================================================
 
-    if 'image' not in request.files:
+    if "image" not in request.files:
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
-                'No image file provided.'
+            "error":
+                "No image file provided."
 
         }), 400
 
 
     file = request.files[
-        'image'
+        "image"
     ]
 
 
     # ========================================================
-    # CHECK FILENAME
+    # FILENAME
     # ========================================================
 
-    if file.filename == '':
+    if file.filename == "":
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
-                'Empty filename.'
+            "error":
+                "Empty filename."
 
         }), 400
 
 
     # ========================================================
-    # READ FILE
+    # READ IMAGE
     # ========================================================
 
     file_bytes = file.read()
 
 
-    # ========================================================
-    # EMPTY IMAGE
-    # ========================================================
-
     if not file_bytes:
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
-                'Image file is empty.'
+            "error":
+                "Image file is empty."
 
         }), 400
 
 
     # ========================================================
-    # CHECK IMAGE SIZE
+    # SIZE LIMIT
     # ========================================================
 
-    if len(file_bytes) > MAX_IMAGE_BYTES:
+    if (
+        len(file_bytes)
+        >
+        MAX_IMAGE_BYTES
+    ):
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
+            "error":
                 (
-                    'Image too large. '
-                    'Maximum allowed size is 5MB. '
-                    f'Uploaded size: '
-                    f'{len(file_bytes) // 1024} KB.'
+                    "Image too large. "
+                    "Maximum size is 5MB. "
+                    f"Uploaded: "
+                    f"{len(file_bytes) // 1024} KB."
                 )
 
         }), 400
@@ -931,7 +1090,7 @@ def predict():
 
         print()
         print(
-            "=============================================="
+            "================================================"
         )
 
         print(
@@ -939,144 +1098,120 @@ def predict():
         )
 
         print(
-            "=============================================="
+            "================================================"
         )
 
         print(
-            'Filename:',
+            "Filename:",
             file.filename
         )
 
         print(
-            'Image size:',
+            "File size:",
             len(file_bytes),
-            'bytes'
+            "bytes"
         )
 
-
         # ====================================================
-        # LOAD MODEL
-        # ====================================================
-
-        model = get_model()
-
-
-        # ====================================================
-        # PREPROCESS IMAGE
+        # PREPROCESS
         # ====================================================
 
-        input_data = preprocess_image_bytes(
-            file_bytes,
-            target_size=(320, 320)
+        input_data = (
+            preprocess_image_bytes(
+                file_bytes,
+                target_size=(
+                    320,
+                    320
+                )
+            )
         )
 
-
         # ====================================================
-        # CONVERT TO TENSOR
+        # TENSOR
         # ====================================================
 
-        input_tensor = tf.convert_to_tensor(
-            input_data,
-            dtype=tf.float32
+        input_tensor = (
+            tf.convert_to_tensor(
+                input_data,
+                dtype=tf.float32
+            )
         )
-
 
         print(
-            'Tensor shape:',
+            "Tensor shape:",
             input_tensor.shape
         )
 
         print(
-            'Tensor dtype:',
+            "Tensor dtype:",
             input_tensor.dtype
         )
 
-
         # ====================================================
-        # RUN MODEL
+        # INFERENCE
         # ====================================================
 
-        print(
-            'Running model inference...'
+        predictions_dict = (
+            run_inference(
+                input_tensor
+            )
         )
 
-
-        predictions = model(
-            input_tensor,
-            training=False
-        )
-
-
         # ====================================================
-        # EXTRACT MODEL OUTPUT
+        # GET OUTPUT
         # ====================================================
 
-        raw_output = extract_model_output(
-            predictions
+        raw_output = (
+            extract_raw_output(
+                predictions_dict
+            )
         )
-
 
         # ====================================================
-        # DEBUG OUTPUT
+        # CHECK OUTPUT SIZE
         # ====================================================
 
-        print()
-        print(
-            '========== MODEL OUTPUT DEBUG =========='
-        )
-
-        print(
-            'Output shape:',
-            raw_output.shape
-        )
-
-        print(
-            'Raw output:',
-            raw_output
-        )
-
-        print(
-            '========================================='
-        )
-
-
-        # ====================================================
-        # CHECK OUTPUT CLASS COUNT
-        # ====================================================
-
-        if len(raw_output) != len(CLASSES):
+        if (
+            len(raw_output)
+            !=
+            len(CLASSES)
+        ):
 
             return jsonify({
 
-                'success':
+                "success":
                     False,
 
-                'error':
+                "error":
                     (
-                        'Model output class count does not '
-                        'match class_names.json.'
+                        "Model output class count does not "
+                        "match class_names.json."
                     ),
 
-                'model_output_classes':
-                    len(raw_output),
+                "model_output_classes":
+                    len(
+                        raw_output
+                    ),
 
-                'class_names_count':
-                    len(CLASSES),
+                "class_names_count":
+                    len(
+                        CLASSES
+                    ),
 
-                'model_output':
+                "raw_output":
                     raw_output.tolist()
 
             }), 500
 
-
         # ====================================================
-        # CONVERT TO PROBABILITIES
+        # PROBABILITIES
         # ====================================================
 
-        probabilities = convert_to_probabilities(
-            raw_output
+        probabilities = (
+            convert_to_probabilities(
+                raw_output
+            )
         )
-
 
         # ====================================================
         # TOP CLASS
@@ -1088,35 +1223,35 @@ def predict():
             )
         )
 
-
         confidence = float(
             probabilities[
                 top_index
             ]
         )
 
+        if (
+            top_index
+            <
+            len(CLASSES)
+        ):
 
-        # ====================================================
-        # VARIETY NAME
-        # ====================================================
-
-        if top_index < len(CLASSES):
-
-            variety_name = CLASSES[
-                top_index
-            ]
+            variety_name = (
+                CLASSES[
+                    top_index
+                ]
+            )
 
         else:
 
-            variety_name = 'Unknown'
-
+            variety_name = (
+                "Unknown"
+            )
 
         # ====================================================
-        # ALL CLASS PREDICTIONS
+        # ALL PREDICTIONS
         # ====================================================
 
         predictions_map = {}
-
 
         for idx, prob in enumerate(
             probabilities
@@ -1124,27 +1259,25 @@ def predict():
 
             if idx < len(CLASSES):
 
-                cls_name = CLASSES[
-                    idx
-                ]
+                class_name = (
+                    CLASSES[idx]
+                )
 
             else:
 
-                cls_name = (
-                    f'class_{idx}'
+                class_name = (
+                    f"class_{idx}"
                 )
 
-
             predictions_map[
-                cls_name
+                class_name
             ] = round(
                 float(prob) * 100,
                 2
             )
 
-
         # ====================================================
-        # SORT RESULTS
+        # SORT FOR LOGS
         # ====================================================
 
         sorted_predictions = sorted(
@@ -1153,76 +1286,74 @@ def predict():
             reverse=True
         )
 
-
         # ====================================================
-        # PRINT FINAL RESULT
+        # LOG FINAL RESULT
         # ====================================================
 
         print()
         print(
-            '========== FINAL PREDICTION =========='
+            "========== FINAL PREDICTION =========="
         )
 
         print(
-            'Predicted variety:',
+            "Predicted variety:",
             variety_name
         )
 
         print(
-            'Confidence:',
+            "Confidence:",
             round(
                 confidence * 100,
                 2
             ),
-            '%'
+            "%"
         )
 
         print(
-            'Class index:',
+            "Class index:",
             top_index
         )
 
         print(
-            'All predictions:'
+            "All predictions:"
         )
 
-
-        for name, probability in sorted_predictions:
+        for (
+            class_name,
+            probability
+        ) in sorted_predictions:
 
             print(
-                f'{name}: {probability}%'
+                f"{class_name}: "
+                f"{probability}%"
             )
 
-
         print(
-            '======================================'
+            "======================================"
         )
 
-        print()
-
-
         # ====================================================
-        # API RESPONSE
+        # RESPONSE
         # ====================================================
 
         return jsonify({
 
-            'success':
+            "success":
                 True,
 
-            'variety':
+            "variety":
                 variety_name,
 
-            'confidence':
+            "confidence":
                 round(
                     confidence * 100,
                     2
                 ),
 
-            'class_index':
+            "class_index":
                 top_index,
 
-            'all_predictions':
+            "all_predictions":
                 predictions_map
 
         })
@@ -1236,24 +1367,24 @@ def predict():
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
-                'Uploaded file is not a valid image.'
+            "error":
+                "Uploaded file is not a valid image."
 
         }), 400
 
 
     # ========================================================
-    # MODEL NOT FOUND
+    # MISSING MODEL
     # ========================================================
 
     except FileNotFoundError as e:
 
         print()
         print(
-            'MODEL FILE ERROR:'
+            "MODEL FILE ERROR"
         )
 
         print(
@@ -1262,18 +1393,18 @@ def predict():
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
+            "error":
                 str(e),
 
-            'model_path':
-                MODEL_PATH,
+            "model_path":
+                SAVED_MODEL_PATH,
 
-            'model_exists':
-                os.path.isfile(
-                    MODEL_PATH
+            "model_exists":
+                os.path.isdir(
+                    SAVED_MODEL_PATH
                 )
 
         }), 500
@@ -1287,31 +1418,34 @@ def predict():
 
         print()
         print(
-            '========== PREDICTION ERROR =========='
+            "========== PREDICTION ERROR =========="
         )
 
         print(
-            'Error type:',
+            "Error type:",
             type(e).__name__
         )
 
         print(
-            'Error:',
+            "Error:",
             str(e)
         )
 
         print(
-            '======================================'
+            traceback.format_exc()
         )
 
+        print(
+            "======================================"
+        )
 
         return jsonify({
 
-            'success':
+            "success":
                 False,
 
-            'error':
-                f'Inference error: {str(e)}'
+            "error":
+                f"Inference error: {str(e)}"
 
         }), 500
 
@@ -1320,27 +1454,34 @@ def predict():
 # START SERVER
 # ============================================================
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     port = int(
         os.environ.get(
-            'PORT',
+            "PORT",
             5000
         )
     )
 
-
     print()
     print(
-        f'Starting Paddy Classification server '
-        f'on port {port}'
+        "================================================"
     )
 
-    print()
+    print(
+        "STARTING PADDY CLASSIFICATION SERVER"
+    )
 
+    print(
+        f"Port: {port}"
+    )
+
+    print(
+        "================================================"
+    )
 
     app.run(
-        host='0.0.0.0',
+        host="0.0.0.0",
         port=port,
         debug=False
     )
