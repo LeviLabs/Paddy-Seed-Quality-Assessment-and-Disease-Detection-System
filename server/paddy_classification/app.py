@@ -12,7 +12,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-
 # ============================================================
 # IMPORTS
 # ============================================================
@@ -47,19 +46,14 @@ MODEL_DIR = os.path.join(
     "models"
 )
 
-SAVED_MODEL_PATH = os.path.join(
+MODEL_PATH = os.path.join(
     MODEL_DIR,
-    "saved_model"
+    "best_paddy_resnet50.keras"
 )
 
 JSON_PATH = os.path.join(
     MODEL_DIR,
-    "class_names.json"
-)
-
-CONFIG_PATH = os.path.join(
-    MODEL_DIR,
-    "model_config.json"
+    "class_names.josan"
 )
 
 
@@ -78,22 +72,17 @@ print(BASE_DIR)
 print("MODEL_DIR:")
 print(MODEL_DIR)
 
-print("SAVED_MODEL_PATH:")
-print(SAVED_MODEL_PATH)
+print("MODEL_PATH:")
+print(MODEL_PATH)
 
 print(
-    "MODEL DIRECTORY EXISTS:",
-    os.path.isdir(SAVED_MODEL_PATH)
+    "MODEL EXISTS:",
+    os.path.isfile(MODEL_PATH)
 )
 
 print(
     "CLASS JSON EXISTS:",
     os.path.isfile(JSON_PATH)
-)
-
-print(
-    "CONFIG EXISTS:",
-    os.path.isfile(CONFIG_PATH)
 )
 
 print("================================================")
@@ -134,9 +123,22 @@ def load_class_names():
 
                 data = json.load(f)
 
+            # Example:
+            # [
+            #   "Aumithri",
+            #   "Bpt",
+            #   ...
+            # ]
+
             if isinstance(data, list):
 
                 return data
+
+            # Example:
+            # {
+            #   "0": "Aumithri",
+            #   "1": "Bpt"
+            # }
 
             if isinstance(data, dict):
 
@@ -149,9 +151,7 @@ def load_class_names():
 
                 except Exception:
 
-                    return list(
-                        data.values()
-                    )
+                    return list(data.values())
 
         except Exception as e:
 
@@ -160,15 +160,12 @@ def load_class_names():
                 str(e)
             )
 
-    print(
-        "Using DEFAULT_CLASSES."
-    )
+    print("Using DEFAULT_CLASSES.")
 
     return DEFAULT_CLASSES
 
 
 CLASSES = load_class_names()
-
 
 print(
     "Loaded classes:",
@@ -177,146 +174,111 @@ print(
 
 
 # ============================================================
-# MODEL GLOBAL VARIABLES
+# MODEL GLOBAL
 # ============================================================
 
 _model = None
-_infer_fn = None
-_input_name = None
 
 
 # ============================================================
-# LOAD SAVED MODEL
+# LOAD KERAS MODEL
 # ============================================================
 
-def get_infer_fn():
+def get_model():
 
     global _model
-    global _infer_fn
-    global _input_name
 
-    if _infer_fn is not None:
-        return _infer_fn
+    if _model is not None:
+        return _model
 
     print()
     print("================================================")
-    print("LOADING SAVED MODEL")
+    print("LOADING KERAS MODEL")
     print("================================================")
 
     print(
         "Path:",
-        SAVED_MODEL_PATH
+        MODEL_PATH
     )
 
-    if not os.path.isdir(
-        SAVED_MODEL_PATH
-    ):
+    if not os.path.isfile(MODEL_PATH):
 
         raise FileNotFoundError(
-            f"SavedModel directory not found: "
-            f"{SAVED_MODEL_PATH}"
-        )
-
-    saved_model_pb = os.path.join(
-        SAVED_MODEL_PATH,
-        "saved_model.pb"
-    )
-
-    if not os.path.isfile(
-        saved_model_pb
-    ):
-
-        raise FileNotFoundError(
-            f"saved_model.pb not found: "
-            f"{saved_model_pb}"
+            f"Keras model not found: {MODEL_PATH}"
         )
 
     print(
-        "Loading TensorFlow SavedModel..."
+        "Loading best_paddy_resnet50.keras..."
     )
 
-    _model = tf.saved_model.load(
-        SAVED_MODEL_PATH
-    )
-
-    print(
-        "SavedModel loaded successfully."
-    )
-
-    signatures = list(
-        _model.signatures.keys()
+    _model = tf.keras.models.load_model(
+        MODEL_PATH,
+        compile=False
     )
 
     print(
-        "Available signatures:",
-        signatures
-    )
-
-    if (
-        "serving_default"
-        not in
-        _model.signatures
-    ):
-
-        raise RuntimeError(
-            "serving_default signature not found. "
-            f"Available signatures: {signatures}"
-        )
-
-    _infer_fn = (
-        _model.signatures[
-            "serving_default"
-        ]
+        "Model loaded successfully."
     )
 
     print(
-        "Input signature:"
+        "Model name:",
+        _model.name
     )
 
     print(
-        _infer_fn
-        .structured_input_signature
+        "Input shape:",
+        _model.input_shape
     )
 
     print(
-        "Output signature:"
+        "Output shape:",
+        _model.output_shape
     )
-
-    print(
-        _infer_fn
-        .structured_outputs
-    )
-
-    args_signature, kwargs_signature = (
-        _infer_fn
-        .structured_input_signature
-    )
-
-    if kwargs_signature:
-
-        _input_name = list(
-            kwargs_signature.keys()
-        )[0]
-
-        print(
-            "Detected input name:",
-            _input_name
-        )
-
-    else:
-
-        _input_name = None
-
-        print(
-            "Using positional model input."
-        )
 
     print("================================================")
     print("MODEL READY")
     print("================================================")
     print()
 
-    return _infer_fn
+    return _model
+
+
+# ============================================================
+# DETECT MODEL INPUT SIZE
+# ============================================================
+
+def get_model_input_size():
+
+    model = get_model()
+
+    input_shape = model.input_shape
+
+    # Handle models with multiple inputs
+    if isinstance(input_shape, list):
+        input_shape = input_shape[0]
+
+    try:
+
+        height = input_shape[1]
+        width = input_shape[2]
+
+        if (
+            height is not None
+            and
+            width is not None
+        ):
+
+            return (
+                int(width),
+                int(height)
+            )
+
+    except Exception:
+
+        pass
+
+    # Standard ResNet50 size
+    return (224, 224)
 
 
 # ============================================================
@@ -333,9 +295,15 @@ MAX_IMAGE_BYTES = (
 # ============================================================
 
 def preprocess_image_bytes(
-    file_bytes,
-    target_size=(320, 320)
+    file_bytes
 ):
+
+    target_size = get_model_input_size()
+
+    print(
+        "Target model size:",
+        target_size
+    )
 
     image = Image.open(
         io.BytesIO(file_bytes)
@@ -366,34 +334,37 @@ def preprocess_image_bytes(
     )
 
     print(
-        "Image min:",
-        float(
-            np.min(img_array)
-        )
+        "Image min before preprocessing:",
+        float(np.min(img_array))
     )
 
     print(
-        "Image max:",
-        float(
-            np.max(img_array)
-        )
+        "Image max before preprocessing:",
+        float(np.max(img_array))
     )
 
     print(
-        "Image mean:",
-        float(
-            np.mean(img_array)
-        )
+        "Image mean before preprocessing:",
+        float(np.mean(img_array))
     )
 
     # ========================================================
-    # IMPORTANT TEST
-    #
-    # NO ConvNeXt preprocess_input() here.
-    #
-    # We are testing whether the model already contains
-    # preprocessing internally.
+    # RESNET50 PREPROCESSING
     # ========================================================
+    #
+    # IMPORTANT:
+    #
+    # If your training code used:
+    #
+    # tf.keras.applications.resnet50.preprocess_input(...)
+    #
+    # then keep this line enabled.
+    #
+    # ========================================================
+
+    img_array = tf.keras.applications.resnet50.preprocess_input(
+        img_array
+    )
 
     img_array = np.expand_dims(
         img_array,
@@ -410,6 +381,16 @@ def preprocess_image_bytes(
         img_array.dtype
     )
 
+    print(
+        "Final min:",
+        float(np.min(img_array))
+    )
+
+    print(
+        "Final max:",
+        float(np.max(img_array))
+    )
+
     return img_array
 
 
@@ -421,28 +402,16 @@ def run_inference(
     input_tensor
 ):
 
-    global _input_name
-
-    infer_fn = get_infer_fn()
+    model = get_model()
 
     print(
         "Running inference..."
     )
 
-    if _input_name:
-
-        outputs = infer_fn(
-            **{
-                _input_name:
-                    input_tensor
-            }
-        )
-
-    else:
-
-        outputs = infer_fn(
-            input_tensor
-        )
+    outputs = model(
+        input_tensor,
+        training=False
+    )
 
     return outputs
 
@@ -460,14 +429,10 @@ def extract_raw_output(
         "========== MODEL OUTPUT =========="
     )
 
-    if isinstance(
-        outputs,
-        dict
-    ):
+    # Some Keras models may return dictionary outputs
+    if isinstance(outputs, dict):
 
-        keys = list(
-            outputs.keys()
-        )
+        keys = list(outputs.keys())
 
         print(
             "Output keys:",
@@ -480,28 +445,29 @@ def extract_raw_output(
                 "Model returned an empty dictionary."
             )
 
-        output_key = keys[0]
-
         output_tensor = outputs[
-            output_key
+            keys[0]
         ]
 
-        print(
-            "Using output key:",
-            output_key
-        )
+    # Some models may return list/tuple
+    elif isinstance(outputs, (list, tuple)):
+
+        if len(outputs) == 0:
+
+            raise RuntimeError(
+                "Model returned an empty output list."
+            )
+
+        output_tensor = outputs[0]
 
     else:
 
         output_tensor = outputs
 
-    if tf.is_tensor(
-        output_tensor
-    ):
 
-        output_array = (
-            output_tensor.numpy()
-        )
+    if tf.is_tensor(output_tensor):
+
+        output_array = output_tensor.numpy()
 
     else:
 
@@ -509,27 +475,27 @@ def extract_raw_output(
             output_tensor
         )
 
+
     print(
         "Full output shape:",
         output_array.shape
     )
 
+
     if output_array.ndim > 1:
 
-        raw_output = (
-            output_array[0]
-        )
+        raw_output = output_array[0]
 
     else:
 
-        raw_output = (
-            output_array
-        )
+        raw_output = output_array
+
 
     raw_output = np.asarray(
         raw_output,
         dtype=np.float32
     )
+
 
     print(
         "RAW MODEL OUTPUT:"
@@ -541,30 +507,22 @@ def extract_raw_output(
 
     print(
         "RAW ARGMAX:",
-        int(
-            np.argmax(raw_output)
-        )
+        int(np.argmax(raw_output))
     )
 
     print(
         "RAW SUM:",
-        float(
-            np.sum(raw_output)
-        )
+        float(np.sum(raw_output))
     )
 
     print(
         "RAW MIN:",
-        float(
-            np.min(raw_output)
-        )
+        float(np.min(raw_output))
     )
 
     print(
         "RAW MAX:",
-        float(
-            np.max(raw_output)
-        )
+        float(np.max(raw_output))
     )
 
     print(
@@ -598,8 +556,9 @@ def convert_to_probabilities(
         np.sum(values)
     )
 
+
     # ========================================================
-    # ALREADY PROBABILITIES
+    # MODEL ALREADY RETURNS SOFTMAX PROBABILITIES
     # ========================================================
 
     if (
@@ -620,8 +579,9 @@ def convert_to_probabilities(
 
         probabilities = values
 
+
     # ========================================================
-    # LOGITS
+    # MODEL RETURNS LOGITS
     # ========================================================
 
     else:
@@ -640,6 +600,7 @@ def convert_to_probabilities(
             ).numpy()
         )
 
+
     print()
     print(
         "FINAL PROBABILITIES:"
@@ -651,17 +612,12 @@ def convert_to_probabilities(
 
     print(
         "FINAL ARGMAX:",
-        int(
-            np.argmax(probabilities)
-        )
+        int(np.argmax(probabilities))
     )
 
     print(
         "FINAL MAX CONFIDENCE:",
-        float(
-            np.max(probabilities)
-        )
-        * 100
+        float(np.max(probabilities)) * 100
     )
 
     return probabilities
@@ -677,6 +633,8 @@ def convert_to_probabilities(
 )
 def index():
 
+    model_size = get_model_input_size()
+
     return jsonify({
 
         "success":
@@ -686,10 +644,13 @@ def index():
             "Paddy Classification",
 
         "architecture":
-            "ConvNeXt-Tiny",
+            "ResNet50",
+
+        "model":
+            "best_paddy_resnet50.keras",
 
         "input_size":
-            "320x320",
+            f"{model_size[0]}x{model_size[1]}",
 
         "classes":
             CLASSES,
@@ -698,10 +659,10 @@ def index():
             len(CLASSES),
 
         "model_type":
-            "TensorFlow SavedModel",
+            "TensorFlow Keras",
 
         "preprocessing":
-            "RGB float32 0-255 - no external preprocess_input",
+            "ResNet50 preprocess_input",
 
         "health":
             "/health",
@@ -725,11 +686,6 @@ def index():
 )
 def health():
 
-    saved_model_pb = os.path.join(
-        SAVED_MODEL_PATH,
-        "saved_model.pb"
-    )
-
     return jsonify({
 
         "success":
@@ -738,21 +694,22 @@ def health():
         "status":
             "healthy",
 
+        "model":
+            "best_paddy_resnet50.keras",
+
         "classes":
             CLASSES,
 
-        "model_directory":
-            SAVED_MODEL_PATH,
+        "model_path":
+            MODEL_PATH,
 
-        "model_directory_exists":
-            os.path.isdir(
-                SAVED_MODEL_PATH
-            ),
-
-        "saved_model_pb_exists":
+        "model_exists":
             os.path.isfile(
-                saved_model_pb
+                MODEL_PATH
             ),
+
+        "class_names_path":
+            JSON_PATH,
 
         "class_names_exists":
             os.path.isfile(
@@ -760,7 +717,7 @@ def health():
             ),
 
         "preprocessing":
-            "NO external ConvNeXt preprocess_input"
+            "ResNet50 preprocess_input"
 
     })
 
@@ -777,7 +734,7 @@ def model_status():
 
     try:
 
-        infer_fn = get_infer_fn()
+        model = get_model()
 
         return jsonify({
 
@@ -788,22 +745,26 @@ def model_status():
                 True,
 
             "model_path":
-                SAVED_MODEL_PATH,
+                MODEL_PATH,
 
-            "input_signature":
+            "model_name":
+                model.name,
+
+            "input_shape":
                 str(
-                    infer_fn
-                    .structured_input_signature
+                    model.input_shape
                 ),
 
-            "output_signature":
+            "output_shape":
                 str(
-                    infer_fn
-                    .structured_outputs
+                    model.output_shape
                 ),
 
             "classes":
-                CLASSES
+                CLASSES,
+
+            "total_classes":
+                len(CLASSES)
 
         })
 
@@ -948,11 +909,7 @@ def predict():
 
         input_data = (
             preprocess_image_bytes(
-                file_bytes,
-                target_size=(
-                    320,
-                    320
-                )
+                file_bytes
             )
         )
 
@@ -1017,6 +974,9 @@ def predict():
 
                 "class_names_count":
                     len(CLASSES),
+
+                "class_names":
+                    CLASSES,
 
                 "raw_output":
                     raw_output.tolist(),
@@ -1167,7 +1127,6 @@ def predict():
             "sorted_predictions":
                 sorted_predictions,
 
-            # Diagnostic information
             "image_md5":
                 image_hash,
 
