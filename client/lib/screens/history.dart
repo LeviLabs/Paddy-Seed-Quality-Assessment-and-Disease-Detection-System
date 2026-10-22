@@ -33,28 +33,65 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<List<_Scan>> _load() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return [];
-    final query = await FirebaseFirestore.instance
+
+    final userRef = FirebaseFirestore.instance
         .collection('users')
-        .doc(user.uid)
-        .collection('test_history')
-        .limit(100)
-        .get()
-        .timeout(const Duration(seconds: 20));
+        .doc(user.uid);
     final scans = <_Scan>[];
-    for (final doc in query.docs) {
-      final data = doc.data();
-      // Do not wait for Supabase images before displaying Firestore history.
-      final url = (data['imageUrl'] ?? '').toString();
-      DateTime date;
-      if (data['createdAt'] is Timestamp) {
-        date = (data['createdAt'] as Timestamp).toDate();
-      } else {
-        date =
-            DateTime.tryParse((data['createdAtLocal'] ?? '').toString()) ??
-            DateTime.now();
+    final seen = <String>{};
+    final errors = <String>[];
+    var successfulCollections = 0;
+
+    // New scans use test_history; earlier app versions may have used tests.
+    // Keep them separate: a document ID can exist in both collections.
+    for (final collectionName in <String>['test_history', 'tests']) {
+      try {
+        final query = await userRef
+            .collection(collectionName)
+            .limit(500)
+            .get()
+            .timeout(const Duration(seconds: 20));
+        successfulCollections++;
+
+        for (final doc in query.docs) {
+          final key = '$collectionName/${doc.id}';
+          if (!seen.add(key)) continue;
+
+          final data = doc.data();
+          final imageUrl = (data['imageUrl'] ?? data['image_url'] ?? '')
+              .toString();
+          final dynamic rawDate =
+              data['createdAt'] ?? data['timestamp'] ?? data['createdAtLocal'];
+          DateTime date;
+          if (rawDate is Timestamp) {
+            date = rawDate.toDate();
+          } else if (rawDate is DateTime) {
+            date = rawDate;
+          } else if (rawDate is num) {
+            // Older records may save Unix time in seconds or milliseconds.
+            final milliseconds = rawDate < 100000000000
+                ? (rawDate * 1000).round()
+                : rawDate.round();
+            date = DateTime.fromMillisecondsSinceEpoch(milliseconds);
+          } else {
+            date =
+                DateTime.tryParse(rawDate?.toString() ?? '') ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+          }
+
+          scans.add(_Scan(key, data, date, imageUrl));
+        }
+      } catch (error) {
+        debugPrint('History load failed for $collectionName: $error');
+        errors.add('$collectionName: $error');
       }
-      scans.add(_Scan(doc.id, data, date, url));
     }
+
+    // Don't incorrectly report "No scans" when both reads were blocked.
+    if (successfulCollections == 0) {
+      throw StateError('Unable to read scan history. ${errors.join(' | ')}');
+    }
+
     scans.sort((a, b) => b.date.compareTo(a.date));
     return scans;
   }
@@ -355,7 +392,8 @@ class _Scan {
   final String url;
   _Scan(this.id, this.data, this.date, this.url);
   Future<String>? _cachedSignedUrl;
-  String get imagePath => (data['imagePath'] ?? '').toString();
+  String get imagePath =>
+      (data['imagePath'] ?? data['image_path'] ?? '').toString();
   Future<String> get signedUrl =>
       _cachedSignedUrl ??= PaddyStorageService.signedImageUrl(imagePath)
           .timeout(const Duration(seconds: 12), onTimeout: () => '')
@@ -363,12 +401,36 @@ class _Scan {
             debugPrint('History image unavailable: $error');
             return '';
           });
-  bool get isPaddy => data['testType'] == 'paddy_classification';
+  bool get isPaddy {
+    final type = (data['testType'] ?? data['test_type'] ?? '')
+        .toString()
+        .toLowerCase();
+    return type == 'paddy_classification' ||
+        type == 'paddy' ||
+        type == 'paddy_seed' ||
+        (type.isEmpty && data.containsKey('variety'));
+  }
+
   String get name =>
-      (isPaddy ? data['variety'] : data['disease'])?.toString() ?? 'Unknown';
-  double get confidence => (data['confidence'] as num?)?.toDouble() ?? 0;
+      (isPaddy
+              ? (data['variety'] ??
+                    data['prediction'] ??
+                    data['predictedClass'])
+              : (data['disease'] ??
+                    data['prediction'] ??
+                    data['predictedClass']))
+          ?.toString() ??
+      'Unknown';
+  double get confidence {
+    final raw = data['confidence'];
+    return raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
   Map<String, dynamic> get predictions => data['predictions'] is Map
       ? Map<String, dynamic>.from(data['predictions'] as Map)
       : {};
-  String get legacyBase64 => (data['imageBase64'] ?? '').toString();
+  String get legacyBase64 =>
+      (data['imageBase64'] ?? data['image_base64'] ?? '').toString();
 }
