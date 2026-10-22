@@ -60,6 +60,7 @@ dependencies:
   # Permissions & Location
   permission_handler: ^12.0.1
   geolocator: ^14.0.3
+  supabase_flutter: ^2.18.3
 
 dev_dependencies:
   flutter_test:

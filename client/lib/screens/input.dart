@@ -5,12 +5,12 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import '../services/paddy_storage_service.dart';
 
 class InputPage {
   InputPage._();
@@ -24,10 +24,9 @@ class InputPage {
   static const String plantDiseaseUrl =
       'https://paddy-plant-disease.onrender.com';
 
-  /// Paddy Classification Render Service URL
-  /// Update this after creating the new Render service
+  /// Public Gradio Space (classification only).
   static const String paddyClassificationUrl =
-      'https://paddy-classification.onrender.com';
+      'https://levi7377-peddy.hf.space';
 
   // ============================================================
   // WARM UP BOTH SERVERS (RENDER COLD START MITIGATION)
@@ -35,15 +34,13 @@ class InputPage {
 
   static void warmUpServer() {
     try {
-      http.get(Uri.parse('$plantDiseaseUrl/health')).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => http.Response('', 408),
-      ).catchError((_) => http.Response('', 500));
-
-      http.get(Uri.parse('$paddyClassificationUrl/health')).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => http.Response('', 408),
-      ).catchError((_) => http.Response('', 500));
+      http
+          .get(Uri.parse('$plantDiseaseUrl/health'))
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => http.Response('', 408),
+          )
+          .catchError((_) => http.Response('', 500));
     } catch (_) {}
   }
 
@@ -66,41 +63,29 @@ class InputPage {
       isScrollControlled: true,
       builder: (sheetContext) {
         return Container(
-          padding: const EdgeInsets.fromLTRB(
-            20,
-            24,
-            20,
-            32,
-          ),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
           decoration: const BoxDecoration(
             color: Color(0xFF4CAF7D),
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
                 child: Container(
                   width: 40,
                   height: 4,
-                  margin: const EdgeInsets.only(
-                    bottom: 20,
-                  ),
+                  margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
-                    color:
-                        Colors.white.withOpacity(0.5),
-                    borderRadius:
-                        BorderRadius.circular(2),
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
 
               Text(
-                'Camera',
+                'Choose Test',
                 style: GoogleFonts.poppins(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -114,8 +99,7 @@ class InputPage {
                 'Choose what you want to test',
                 style: TextStyle(
                   fontSize: 13,
-                  color:
-                      Colors.white.withOpacity(0.85),
+                  color: Colors.white.withOpacity(0.85),
                 ),
               ),
 
@@ -124,11 +108,9 @@ class InputPage {
               _cameraOptionTile(
                 sheetContext: sheetContext,
                 pageContext: pageContext,
-                icon:
-                    Icons.coronavirus_rounded,
+                icon: Icons.coronavirus_rounded,
                 title: 'Plant Disease',
-                subtitle:
-                    'Scan a leaf for disease detection',
+                subtitle: 'Scan a leaf for disease detection',
                 testType: 'plant_disease',
               ),
 
@@ -139,8 +121,7 @@ class InputPage {
                 pageContext: pageContext,
                 icon: Icons.grass_rounded,
                 title: 'Paddy Classification',
-                subtitle:
-                    'Scan paddy seeds for purity and quality',
+                subtitle: 'Scan paddy seeds for purity and quality',
                 testType: 'paddy_classification',
               ),
             ],
@@ -170,18 +151,13 @@ class InputPage {
         // ...but do the actual work (camera + navigation) using
         // the page's context, which stays alive after the sheet
         // is gone.
-        _pickImageForTest(
-          pageContext,
-          testType,
-        );
+        _showImageSourceOptions(pageContext, testType);
       },
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color:
-              Colors.white.withOpacity(0.15),
-          borderRadius:
-              BorderRadius.circular(18),
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Row(
           children: [
@@ -190,30 +166,22 @@ class InputPage {
               height: 46,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(
-                icon,
-                color:
-                    const Color(0xFF2E7D53),
-              ),
+              child: Icon(icon, color: const Color(0xFF2E7D53)),
             ),
 
             const SizedBox(width: 14),
 
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style:
-                        GoogleFonts.poppins(
+                    style: GoogleFonts.poppins(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.w600,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
@@ -224,18 +192,14 @@ class InputPage {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white
-                          .withOpacity(0.85),
+                      color: Colors.white.withOpacity(0.85),
                     ),
                   ),
                 ],
               ),
             ),
 
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white),
           ],
         ),
       ),
@@ -243,104 +207,195 @@ class InputPage {
   }
 
   // ============================================================
-  // OPEN PHONE CAMERA
+  // CHOOSE CAMERA OR GALLERY AFTER SELECTING A TEST
   // ============================================================
+
+  static Future<void> _showImageSourceOptions(
+    BuildContext context,
+    String testType,
+  ) async {
+    if (!context.mounted) return;
+
+    final String heading = testType == 'plant_disease'
+        ? 'Plant Disease'
+        : 'Paddy Classification';
+
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+        decoration: const BoxDecoration(
+          color: Color(0xFF4CAF7D),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              heading,
+              style: GoogleFonts.poppins(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Choose how to add your image',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.white.withOpacity(0.85),
+              ),
+            ),
+            const SizedBox(height: 22),
+            _imageSourceTile(
+              sheetContext: sheetContext,
+              icon: Icons.camera_alt_rounded,
+              title: 'Take Photo',
+              subtitle: 'Open your camera',
+              source: ImageSource.camera,
+            ),
+            const SizedBox(height: 14),
+            _imageSourceTile(
+              sheetContext: sheetContext,
+              icon: Icons.photo_library_rounded,
+              title: 'Upload from Gallery',
+              subtitle: 'Choose an existing photo',
+              source: ImageSource.gallery,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null || !context.mounted) return;
+    await _pickImageForTest(context, testType, source);
+  }
+
+  static Widget _imageSourceTile({
+    required BuildContext sheetContext,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required ImageSource source,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(sheetContext, source),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: const Color(0xFF2E7D53)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.85),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
 
   static Future<void> _pickImageForTest(
     BuildContext context,
     String testType,
+    ImageSource source,
   ) async {
-    final ImagePicker picker =
-        ImagePicker();
-
+    final ImagePicker picker = ImagePicker();
     XFile? photo;
 
     try {
       photo = await picker.pickImage(
-        source: ImageSource.camera,
+        source: source,
         imageQuality: 80,
         maxWidth: 800,
         maxHeight: 800,
       );
     } catch (e) {
-      debugPrint(
-        'Camera error: $e',
-      );
-
+      debugPrint('Image selection error: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not open camera',
-            ),
-          ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not select an image: $e')),
         );
       }
-
       return;
     }
 
-    if (photo == null) {
-      // User cancelled the camera — this is expected, just go
-      // back quietly (already on the home screen since the sheet
-      // is closed).
-      return;
-    }
+    if (photo == null || !context.mounted) return;
 
-    if (!context.mounted) {
-      return;
-    }
-
-    final File imageFile =
-        File(photo.path);
-
-    if (testType == 'plant_disease') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) =>
-              PlantDiseaseInputPage(
-            imageFile: imageFile,
-          ),
-        ),
-      );
-
-      return;
-    }
-
+    final File imageFile = File(photo.path);
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            PaddyClassificationInputPage(
-          imageFile: imageFile,
-        ),
+        builder: (_) => testType == 'plant_disease'
+            ? PlantDiseaseInputPage(imageFile: imageFile)
+            : PaddyClassificationInputPage(imageFile: imageFile),
       ),
     );
   }
 }
 
-
 // ================================================================
 // PLANT DISEASE INPUT PAGE
 // ================================================================
 
-class PlantDiseaseInputPage
-    extends StatefulWidget {
+class PlantDiseaseInputPage extends StatefulWidget {
   final File imageFile;
 
-  const PlantDiseaseInputPage({
-    super.key,
-    required this.imageFile,
-  });
+  const PlantDiseaseInputPage({super.key, required this.imageFile});
 
   @override
-  State<PlantDiseaseInputPage> createState() =>
-      _PlantDiseaseInputPageState();
+  State<PlantDiseaseInputPage> createState() => _PlantDiseaseInputPageState();
 }
 
-class _PlantDiseaseInputPageState
-    extends State<PlantDiseaseInputPage> {
-
+class _PlantDiseaseInputPageState extends State<PlantDiseaseInputPage> {
   bool _isRunning = false;
   String? _errorMessage;
   String _processingText = 'Preparing image...';
@@ -358,9 +413,7 @@ class _PlantDiseaseInputPageState
   // ============================================================
 
   Future<Map<String, dynamic>> _sendToRender() async {
-    final Uri url = Uri.parse(
-      '${InputPage.plantDiseaseUrl}/predict',
-    );
+    final Uri url = Uri.parse('${InputPage.plantDiseaseUrl}/predict');
 
     const int maxAttempts = 2;
     http.Response? response;
@@ -397,14 +450,11 @@ class _PlantDiseaseInputPageState
           ),
         );
 
-        final http.StreamedResponse streamedResponse =
-            await request.send().timeout(
-          const Duration(seconds: 120),
-        );
+        final http.StreamedResponse streamedResponse = await request
+            .send()
+            .timeout(const Duration(seconds: 120));
 
-        response = await http.Response.fromStream(
-          streamedResponse,
-        );
+        response = await http.Response.fromStream(streamedResponse);
 
         debugPrint(
           'Render attempt $attempt status: '
@@ -430,9 +480,7 @@ class _PlantDiseaseInputPageState
             'Retrying in ${attempt * 3} seconds...',
           );
 
-          await Future.delayed(
-            Duration(seconds: attempt * 3),
-          );
+          await Future.delayed(Duration(seconds: attempt * 3));
           continue;
         }
 
@@ -443,9 +491,7 @@ class _PlantDiseaseInputPageState
         );
       } on TimeoutException {
         if (attempt == maxAttempts) {
-          throw Exception(
-            'Request to AI server timed out after 120 seconds.',
-          );
+          throw Exception('Request to AI server timed out after 120 seconds.');
         }
 
         debugPrint(
@@ -453,14 +499,10 @@ class _PlantDiseaseInputPageState
           'Retrying in ${attempt * 3} seconds...',
         );
 
-        await Future.delayed(
-          Duration(seconds: attempt * 3),
-        );
+        await Future.delayed(Duration(seconds: attempt * 3));
       } on SocketException catch (e) {
         if (attempt == maxAttempts) {
-          throw Exception(
-            'Could not connect to AI server: $e',
-          );
+          throw Exception('Could not connect to AI server: $e');
         }
 
         debugPrint(
@@ -468,127 +510,60 @@ class _PlantDiseaseInputPageState
           'Retrying in ${attempt * 3} seconds...',
         );
 
-        await Future.delayed(
-          Duration(seconds: attempt * 3),
-        );
+        await Future.delayed(Duration(seconds: attempt * 3));
       }
     }
 
     final http.Response? finalResponse = response;
     if (finalResponse == null || finalResponse.statusCode != 200) {
-      throw Exception(
-        'AI server did not return a successful response.',
-      );
+      throw Exception('AI server did not return a successful response.');
     }
 
-    final dynamic decoded =
-        jsonDecode(finalResponse.body);
+    final dynamic decoded = jsonDecode(finalResponse.body);
 
-    if (decoded
-        is! Map<String, dynamic>) {
-      throw Exception(
-        'Invalid response from server',
-      );
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid response from server');
     }
 
     return decoded;
   }
 
   // ============================================================
-  // UPLOAD TO FIREBASE STORAGE & ENCODE IMAGE
+  // UPLOAD TO PRIVATE SUPABASE STORAGE
   // ============================================================
 
-  Future<String> _uploadToFirebaseStorage() async {
-    try {
-      final User? user = FirebaseAuth.instance.currentUser;
-      final String userId = user?.uid ?? 'guest_user';
-      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final String fileName = 'plant_disease_$timestamp.jpg';
-
-      final Reference ref = FirebaseStorage.instance
-          .ref()
-          .child('users')
-          .child(userId)
-          .child('plant_disease')
-          .child(fileName);
-
-      final SettableMetadata metadata = SettableMetadata(
-        contentType: 'image/jpeg',
-      );
-
-      final UploadTask uploadTask = ref.putFile(widget.imageFile, metadata);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
-      debugPrint('Firebase Storage URL: $downloadUrl');
-      return downloadUrl;
-    } catch (e) {
-      debugPrint('Firebase Storage upload warning: $e');
-      return '';
-    }
+  Future<String> _uploadToSupabaseStorage() async {
+    return PaddyStorageService.uploadImage(
+      file: widget.imageFile,
+      testType: 'plant_disease',
+    );
   }
-
-  Future<String> _encodeImageToBase64() async {
-    try {
-      final Uint8List imageBytes = await widget.imageFile.readAsBytes();
-      return base64Encode(imageBytes);
-    } catch (e) {
-      debugPrint('Image encoding error: $e');
-      return '';
-    }
-  }
-
-  // ============================================================
-  // SAVE RESULT TO FIRESTORE (SAFE BACKGROUND)
-  // ============================================================
 
   Future<void> _saveResultToFirestore({
     required Map<String, dynamic> result,
-    required String imageUrl,
-    required String imageBase64,
+    required String imagePath,
   }) async {
-    try {
-      final User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        debugPrint('Firestore save skipped: user is not logged in.');
-        return;
-      }
-
-      final String disease =
-          result['disease']?.toString() ?? 'Unknown';
-
-      final dynamic confidenceValue = result['confidence'];
-      final double confidence = confidenceValue is num
-          ? confidenceValue.toDouble()
-          : 0.0;
-
-      final dynamic predictionsValue = result['predictions'];
-      final Map<String, dynamic> predictions = predictionsValue is Map
-          ? Map<String, dynamic>.from(predictionsValue)
-          : <String, dynamic>{};
-
-      final int classIndex = result['class_index'] is num
-          ? (result['class_index'] as num).toInt()
-          : -1;
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('test_history')
-          .add({
-        'testType': 'plant_disease',
-        'disease': disease,
-        'confidence': confidence,
-        'classIndex': classIndex,
-        'predictions': predictions,
-        'imageUrl': imageUrl,
-        'imageBase64': imageBase64,
-        'localImagePath': widget.imageFile.path,
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdAtLocal': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('Firestore save skipped/failed: $e');
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('Please sign in to save your scan history.');
     }
+    final data = <String, dynamic>{
+      'testType': 'plant_disease',
+      'confidence': (result['confidence'] as num?)?.toDouble() ?? 0.0,
+      'classIndex': result['class_index'],
+      'predictions': result['predictions'] ?? <String, dynamic>{},
+      'imagePath': imagePath,
+      'imageBucket': PaddyStorageService.bucket,
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+    };
+    data['disease'] = result['disease']?.toString() ?? 'Unknown';
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('test_history')
+        .add(data);
+    debugPrint('History successfully saved to Firestore');
   }
 
   // ============================================================
@@ -635,9 +610,7 @@ class _PlantDiseaseInputPageState
       _progressTimer?.cancel();
 
       if (result['success'] != true) {
-        throw Exception(
-          result['error'] ?? 'Prediction failed',
-        );
+        throw Exception(result['error'] ?? 'Prediction failed');
       }
 
       if (!mounted) return;
@@ -647,19 +620,25 @@ class _PlantDiseaseInputPageState
         _progress = 1.0;
       });
 
-      // Background safe storage & history save (non-blocking)
+      // Save to private Supabase Storage and Firestore.
+      // If saving fails, show the result but report the failure honestly.
       String imageUrl = '';
-      String imageBase64 = '';
       try {
-        imageUrl = await _uploadToFirebaseStorage();
-        imageBase64 = await _encodeImageToBase64();
-        await _saveResultToFirestore(
-          result: result,
-          imageUrl: imageUrl,
-          imageBase64: imageBase64,
-        );
+        final imagePath = await _uploadToSupabaseStorage();
+        await _saveResultToFirestore(result: result, imagePath: imagePath);
+        imageUrl = await PaddyStorageService.signedImageUrl(imagePath);
       } catch (err) {
-        debugPrint('Non-critical background storage error: $err');
+        debugPrint('History save failed: $err');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Prediction worked, but history was not fully saved: $err',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
 
       if (!mounted) return;
@@ -677,7 +656,6 @@ class _PlantDiseaseInputPageState
           ),
         ),
       );
-
     } catch (e) {
       _progressTimer?.cancel();
       debugPrint('Plant disease processing error: $e');
@@ -691,9 +669,7 @@ class _PlantDiseaseInputPageState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Analysis failed: $e',
-          ),
+          content: Text('Analysis failed: $e'),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -707,18 +683,15 @@ class _PlantDiseaseInputPageState
   Widget _processingView() {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
 
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(24),
       ),
 
       child: Column(
         children: [
-
           const SizedBox(
             width: 70,
             height: 70,
@@ -728,92 +701,57 @@ class _PlantDiseaseInputPageState
             ),
           ),
 
-          const SizedBox(
-            height: 24,
-          ),
+          const SizedBox(height: 24),
 
           Text(
             'Analyzing Plant',
-            style:
-                GoogleFonts.poppins(
+            style: GoogleFonts.poppins(
               fontSize: 22,
-              fontWeight:
-                  FontWeight.bold,
-              color:
-                  Colors.black87,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
           ),
 
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
 
           Text(
             _processingText,
-            textAlign:
-                TextAlign.center,
-            style:
-                GoogleFonts.poppins(
-              fontSize: 14,
-              color:
-                  Colors.black54,
-            ),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 14, color: Colors.black54),
           ),
 
-          const SizedBox(
-            height: 22,
-          ),
+          const SizedBox(height: 22),
 
           ClipRRect(
-            borderRadius:
-                BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20),
 
-            child:
-                LinearProgressIndicator(
+            child: LinearProgressIndicator(
               minHeight: 8,
               value: _progress,
-              backgroundColor:
-                  const Color(
-                0xFFE8E8E8,
-              ),
-              valueColor:
-                  const AlwaysStoppedAnimation<
-                      Color>(
+              backgroundColor: const Color(0xFFE8E8E8),
+              valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF4CAF7D),
               ),
             ),
           ),
 
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
 
           Text(
             '${(_progress * 100).round()}%',
-            style:
-                GoogleFonts.poppins(
+            style: GoogleFonts.poppins(
               fontSize: 12,
-              fontWeight:
-                  FontWeight.w600,
-              color:
-                  Colors.black54,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
             ),
           ),
 
-          const SizedBox(
-            height: 20,
-          ),
+          const SizedBox(height: 20),
 
           Text(
             'Please keep the app open while we process your image.',
-            textAlign:
-                TextAlign.center,
-            style:
-                GoogleFonts.poppins(
-              fontSize: 12,
-              color:
-                  Colors.black45,
-            ),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.black45),
           ),
         ],
       ),
@@ -826,167 +764,101 @@ class _PlantDiseaseInputPageState
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF6F3ED),
+      backgroundColor: const Color(0xFFF6F3ED),
 
       appBar: AppBar(
-        backgroundColor:
-            const Color(0xFFF6F3ED),
+        backgroundColor: const Color(0xFFF6F3ED),
         elevation: 0,
 
         title: Text(
           'Plant Disease',
-          style:
-              GoogleFonts.poppins(
-            color:
-                Colors.black87,
-            fontWeight:
-                FontWeight.w600,
+          style: GoogleFonts.poppins(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
           ),
         ),
 
-        iconTheme:
-            const IconThemeData(
-          color: Colors.black87,
-        ),
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
 
       body: SafeArea(
         child: Padding(
-          padding:
-              const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
 
-          child:
-              _isRunning
-                  ? Center(
-                      child:
-                          SingleChildScrollView(
-                        child:
-                            _processingView(),
+          child: _isRunning
+              ? Center(child: SingleChildScrollView(child: _processingView()))
+              : Column(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+
+                        child: Image.file(
+                          widget.imageFile,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                    )
-                  : Column(
-                      children: [
-
-                        Expanded(
-                          child:
-                              ClipRRect(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              24,
-                            ),
-
-                            child:
-                                Image.file(
-                              widget.imageFile,
-                              width:
-                                  double.infinity,
-                              fit:
-                                  BoxFit.cover,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        if (_errorMessage !=
-                            null)
-                          Padding(
-                            padding:
-                                const EdgeInsets
-                                    .only(
-                              bottom: 12,
-                            ),
-
-                            child:
-                                Text(
-                              _errorMessage!,
-                              textAlign:
-                                  TextAlign.center,
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.red,
-                                fontSize:
-                                    12,
-                              ),
-                            ),
-                          ),
-
-                        SizedBox(
-                          width:
-                              double.infinity,
-
-                          child:
-                              ElevatedButton(
-                            onPressed:
-                                _runPlantDiseaseTest,
-
-                            style:
-                                ElevatedButton
-                                    .styleFrom(
-                              backgroundColor:
-                                  const Color(
-                                0xFF4CAF7D,
-                              ),
-
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                vertical:
-                                    16,
-                              ),
-
-                              shape:
-                                  RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  16,
-                                ),
-                              ),
-                            ),
-
-                            child:
-                                Text(
-                              'Analyze Plant Disease',
-                              style:
-                                  GoogleFonts.poppins(
-                                color:
-                                    Colors.white,
-                                fontWeight:
-                                    FontWeight
-                                        .w600,
-                                fontSize:
-                                    16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
+
+                    const SizedBox(height: 20),
+
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+
+                        child: Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+
+                    SizedBox(
+                      width: double.infinity,
+
+                      child: ElevatedButton(
+                        onPressed: _runPlantDiseaseTest,
+
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4CAF7D),
+
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+
+                        child: Text(
+                          'Analyze Plant Disease',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
   }
 }
 
-
 // ================================================================
 // PLANT DISEASE RESULT PAGE
 // ================================================================
 
-class PlantDiseaseResultPage
-    extends StatelessWidget {
-
+class PlantDiseaseResultPage extends StatelessWidget {
   final File imageFile;
-  final Map<String, dynamic>
-      result;
+  final Map<String, dynamic> result;
   final String imageUrl;
 
   const PlantDiseaseResultPage({
@@ -1000,17 +872,12 @@ class PlantDiseaseResultPage
   // FORMAT DISEASE NAME
   // ============================================================
 
-  String _formatDisease(
-    String disease,
-  ) {
+  String _formatDisease(String disease) {
     return disease
         .split('_')
         .map(
           (String word) =>
-              word.isEmpty
-                  ? word
-                  : word[0].toUpperCase() +
-                      word.substring(1),
+              word.isEmpty ? word : word[0].toUpperCase() + word.substring(1),
         )
         .join(' ');
   }
@@ -1020,369 +887,214 @@ class PlantDiseaseResultPage
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
+    final String disease = result['disease']?.toString() ?? 'Unknown';
 
-    final String disease =
-        result['disease']
-                ?.toString() ??
-            'Unknown';
+    final double confidence = result['confidence'] is num
+        ? (result['confidence'] as num).toDouble()
+        : 0.0;
 
-    final double confidence =
-        result['confidence']
-                is num
-            ? (result['confidence']
-                    as num)
-                .toDouble()
-            : 0.0;
+    final String formattedDisease = _formatDisease(disease);
 
-    final String formattedDisease =
-        _formatDisease(
-      disease,
-    );
-
-    final dynamic predictions =
-        result['predictions'];
+    final dynamic predictions = result['predictions'];
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF6F3ED),
+      backgroundColor: const Color(0xFFF6F3ED),
 
       appBar: AppBar(
-        backgroundColor:
-            const Color(0xFFF6F3ED),
+        backgroundColor: const Color(0xFFF6F3ED),
         elevation: 0,
 
-        title:
-            Text(
+        title: Text(
           'Plant Disease Result',
-          style:
-              GoogleFonts.poppins(
-            color:
-                Colors.black87,
-            fontWeight:
-                FontWeight.w600,
+          style: GoogleFonts.poppins(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
           ),
         ),
 
-        iconTheme:
-            const IconThemeData(
-          color: Colors.black87,
-        ),
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
 
       body: SafeArea(
-        child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            20,
-          ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
 
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment
-                    .stretch,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
 
             children: [
-
               // --------------------------------------------------
               // CAPTURED IMAGE
               // --------------------------------------------------
-
               ClipRRect(
-                borderRadius:
-                    BorderRadius
-                        .circular(24),
+                borderRadius: BorderRadius.circular(24),
 
-                child:
-                    Image.file(
+                child: Image.file(
                   imageFile,
                   height: 300,
-                  width:
-                      double.infinity,
-                  fit:
-                      BoxFit.cover,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // MAIN RESULT
               // --------------------------------------------------
-
               Container(
-                padding:
-                    const EdgeInsets
-                        .all(20),
+                padding: const EdgeInsets.all(20),
 
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.white,
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    24,
-                  ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
                 ),
 
                 child: Column(
                   children: [
-
                     const Icon(
-                      Icons
-                          .local_florist_rounded,
+                      Icons.local_florist_rounded,
                       size: 52,
-                      color:
-                          Color(
-                        0xFF4CAF7D,
-                      ),
+                      color: Color(0xFF4CAF7D),
                     ),
 
-                    const SizedBox(
-                      height: 12,
-                    ),
+                    const SizedBox(height: 12),
 
                     Text(
                       formattedDisease,
-                      textAlign:
-                          TextAlign.center,
+                      textAlign: TextAlign.center,
 
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 25,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                        color:
-                            Colors.black87,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const SizedBox(height: 8),
 
                     Text(
                       'Confidence',
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 14,
-                        color:
-                            Colors.black54,
+                        color: Colors.black54,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 4,
-                    ),
+                    const SizedBox(height: 4),
 
                     Text(
                       '${confidence.toStringAsFixed(2)}%',
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 32,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                        color:
-                            const Color(
-                          0xFF4CAF7D,
-                        ),
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF4CAF7D),
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // PREDICTION DETAILS
               // --------------------------------------------------
-
               if (predictions is Map)
                 Container(
-                  padding:
-                      const EdgeInsets
-                          .all(20),
+                  padding: const EdgeInsets.all(20),
 
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        Colors.white,
-                    borderRadius:
-                        BorderRadius
-                            .circular(
-                      24,
-                    ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
                   ),
 
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
-
                       Text(
                         'Prediction Details',
-                        style:
-                            GoogleFonts
-                                .poppins(
-                          fontSize:
-                              18,
-                          fontWeight:
-                              FontWeight
-                                  .w600,
-                          color:
-                              Colors.black87,
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 14,
-                      ),
+                      const SizedBox(height: 14),
 
-                      ...predictions
-                          .entries
-                          .map(
-                        (entry) {
+                      ...predictions.entries.map((entry) {
+                        final String name = _formatDisease(
+                          entry.key.toString(),
+                        );
 
-                          final String
-                              name =
-                              _formatDisease(
-                            entry.key
-                                .toString(),
-                          );
+                        final double value = entry.value is num
+                            ? (entry.value as num).toDouble()
+                            : 0.0;
 
-                          final double
-                              value =
-                              entry.value
-                                      is num
-                                  ? (entry
-                                          .value
-                                      as num)
-                                      .toDouble()
-                                  : 0.0;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
 
-                          return Padding(
-                            padding:
-                                const EdgeInsets
-                                    .only(
-                              bottom:
-                                  10,
-                            ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  name,
 
-                            child:
-                                Row(
-                              children: [
-
-                                Expanded(
-                                  child:
-                                      Text(
-                                    name,
-
-                                    style:
-                                        GoogleFonts
-                                            .poppins(
-                                      fontSize:
-                                          13,
-                                      color:
-                                          Colors.black87,
-                                    ),
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    color: Colors.black87,
                                   ),
                                 ),
+                              ),
 
-                                Text(
-                                  '${value.toStringAsFixed(2)}%',
+                              Text(
+                                '${value.toStringAsFixed(2)}%',
 
-                                  style:
-                                      GoogleFonts
-                                          .poppins(
-                                    fontSize:
-                                        13,
-                                    fontWeight:
-                                        FontWeight
-                                            .w600,
-                                    color:
-                                        Colors.black54,
-                                  ),
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black54,
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // SAVED CONFIRMATION
               // --------------------------------------------------
-
               Container(
-                padding:
-                    const EdgeInsets
-                        .all(16),
+                padding: const EdgeInsets.all(16),
 
-                decoration:
-                    BoxDecoration(
-                  color:
-                      const Color(
-                    0xFFE8F5E9,
-                  ),
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    18,
-                  ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(18),
                 ),
 
                 child: Row(
                   children: [
-
                     const Icon(
-                      Icons
-                          .cloud_done_rounded,
-                      color:
-                          Color(
-                        0xFF2E7D53,
-                      ),
+                      Icons.cloud_done_rounded,
+                      color: Color(0xFF2E7D53),
                     ),
 
-                    const SizedBox(
-                      width: 10,
-                    ),
+                    const SizedBox(width: 10),
 
                     Expanded(
-                      child:
-                          Text(
-                        'This result and image have been saved to your history.',
-                        style:
-                            GoogleFonts
-                                .poppins(
-                          fontSize:
-                              12,
-                          color:
-                              const Color(
-                            0xFF2E7D53,
-                          ),
+                      child: Text(
+                        'History is saved when you are signed in and storage is available.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF2E7D53),
                         ),
                       ),
                     ),
@@ -1390,63 +1102,35 @@ class PlantDiseaseResultPage
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // DONE
               // --------------------------------------------------
-
               SizedBox(
-                width:
-                    double.infinity,
+                width: double.infinity,
 
-                child:
-                    ElevatedButton(
+                child: ElevatedButton(
                   onPressed: () {
-                    Navigator.of(
-                      context,
-                    ).pop();
+                    Navigator.of(context).pop();
                   },
 
-                  style:
-                      ElevatedButton
-                          .styleFrom(
-                    backgroundColor:
-                        const Color(
-                      0xFF4CAF7D,
-                    ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4CAF7D),
 
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
 
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        16,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
 
-                  child:
-                      Text(
+                  child: Text(
                     'Done',
-                    style:
-                        GoogleFonts
-                            .poppins(
-                      color:
-                          Colors.white,
-                      fontWeight:
-                          FontWeight
-                              .w600,
-                      fontSize:
-                          16,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -1459,7 +1143,6 @@ class PlantDiseaseResultPage
   }
 }
 
-
 // ================================================================
 // PADDY CLASSIFICATION INPUT PAGE
 // ================================================================
@@ -1467,24 +1150,18 @@ class PlantDiseaseResultPage
 // it to the render server, uploads it to Supabase, saves the
 // result to Firestore, then opens the report page.
 
-class PaddyClassificationInputPage
-    extends StatefulWidget {
+class PaddyClassificationInputPage extends StatefulWidget {
   final File imageFile;
 
-  const PaddyClassificationInputPage({
-    super.key,
-    required this.imageFile,
-  });
+  const PaddyClassificationInputPage({super.key, required this.imageFile});
 
   @override
-  State<PaddyClassificationInputPage>
-      createState() =>
-          _PaddyClassificationInputPageState();
+  State<PaddyClassificationInputPage> createState() =>
+      _PaddyClassificationInputPageState();
 }
 
 class _PaddyClassificationInputPageState
     extends State<PaddyClassificationInputPage> {
-
   bool _isRunning = false;
   String? _errorMessage;
   String _processingText = 'Preparing image...';
@@ -1501,222 +1178,213 @@ class _PaddyClassificationInputPageState
   // SEND IMAGE TO RENDER
   // ============================================================
 
-  Future<Map<String, dynamic>> _sendToRender() async {
-    final Uri url = Uri.parse(
-      '${InputPage.paddyClassificationUrl}/predict',
-    );
+  // ============================================================
+  // SEND IMAGE TO HUGGING FACE GRADIO (upload -> queue -> SSE)
+  // ============================================================
 
-    const int maxAttempts = 2;
-    http.Response? response;
+  Future<Map<String, dynamic>> _sendToHuggingFace() async {
+    final String base = InputPage.paddyClassificationUrl;
+    final client = http.Client();
 
-    // Compress image before sending (fixes large image 502 errors)
-    Uint8List imageBytes;
     try {
-      final Uint8List? compressed = await FlutterImageCompress.compressWithFile(
-        widget.imageFile.absolute.path,
-        minWidth: 800,
-        minHeight: 800,
-        quality: 80,
-        format: CompressFormat.jpeg,
-      );
-      imageBytes = compressed ?? await widget.imageFile.readAsBytes();
-    } catch (_) {
-      imageBytes = await widget.imageFile.readAsBytes();
-    }
-
-    debugPrint('Compressed image size: ${imageBytes.length ~/ 1024}KB');
-
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      Uint8List imageBytes;
       try {
-        final http.MultipartRequest request = http.MultipartRequest(
-          'POST',
-          url,
-        );
+        imageBytes =
+            await FlutterImageCompress.compressWithFile(
+              widget.imageFile.absolute.path,
+              minWidth: 800,
+              minHeight: 800,
+              quality: 80,
+              format: CompressFormat.jpeg,
+            ) ??
+            await widget.imageFile.readAsBytes();
+      } catch (_) {
+        imageBytes = await widget.imageFile.readAsBytes();
+      }
 
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'image',
-            imageBytes,
-            filename: 'image.jpg',
-          ),
-        );
+      // 1. Upload image to Gradio's temporary-file endpoint.
+      final upload = http.MultipartRequest(
+        'POST',
+        Uri.parse('$base/gradio_api/upload'),
+      );
+      upload.files.add(
+        http.MultipartFile.fromBytes(
+          'files',
+          imageBytes,
+          filename: 'paddy.jpg',
+        ),
+      );
 
-        final http.StreamedResponse streamedResponse =
-            await request.send().timeout(
-          const Duration(seconds: 120),
-        );
-
-        response = await http.Response.fromStream(
-          streamedResponse,
-        );
-
-        debugPrint(
-          'Render attempt $attempt status: ${response.statusCode}',
-        );
-
-        if (response.statusCode == 200) {
-          break;
-        }
-
-        if ((response.statusCode == 502 ||
-                response.statusCode == 503 ||
-                response.statusCode == 504) &&
-            attempt < maxAttempts) {
-          debugPrint(
-            'Render server returned ${response.statusCode}. Retrying in ${attempt * 3} seconds...',
-          );
-
-          await Future.delayed(
-            Duration(seconds: attempt * 3),
-          );
-          continue;
-        }
-
+      final uploaded = await client
+          .send(upload)
+          .timeout(const Duration(seconds: 120));
+      final uploadResponse = await http.Response.fromStream(uploaded);
+      if (uploadResponse.statusCode != 200) {
         throw Exception(
-          'Server error ${response.statusCode}: ${response.body}',
-        );
-      } on TimeoutException {
-        if (attempt == maxAttempts) {
-          throw Exception(
-            'Request to AI server timed out after 45 seconds.',
-          );
-        }
-
-        debugPrint(
-          'Render request timed out. Retrying in ${attempt * 3} seconds...',
-        );
-
-        await Future.delayed(
-          Duration(seconds: attempt * 3),
-        );
-      } on SocketException catch (e) {
-        if (attempt == maxAttempts) {
-          throw Exception(
-            'Could not connect to AI server: $e',
-          );
-        }
-
-        debugPrint(
-          'Render connection error: $e. Retrying in ${attempt * 3} seconds...',
-        );
-
-        await Future.delayed(
-          Duration(seconds: attempt * 3),
+          'Hugging Face image upload failed '
+          '(${uploadResponse.statusCode}): ${uploadResponse.body}',
         );
       }
-    }
+      final paths = jsonDecode(uploadResponse.body);
+      if (paths is! List || paths.isEmpty || paths.first is! String) {
+        throw const FormatException('Invalid Gradio upload response');
+      }
+      final String uploadedPath = paths.first as String;
 
-    final http.Response? finalResponse = response;
-    if (finalResponse == null || finalResponse.statusCode != 200) {
-      throw Exception(
-        'AI server did not return a successful response.',
+      // 2. Submit image for inference. The Space uses Gradio's
+      // queued /predict endpoint rather than a Flask multipart API.
+      final submitResponse = await client
+          .post(
+            Uri.parse('$base/gradio_api/call/predict'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'data': [
+                {
+                  'path': uploadedPath,
+                  'meta': {'_type': 'gradio.FileData'},
+                },
+              ],
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (submitResponse.statusCode != 200) {
+        throw Exception(
+          'Gradio prediction request failed '
+          '(${submitResponse.statusCode}): ${submitResponse.body}',
+        );
+      }
+      final submission = jsonDecode(submitResponse.body);
+      if (submission is! Map || submission['event_id'] is! String) {
+        throw const FormatException('Gradio did not return an event ID');
+      }
+      final eventId = Uri.encodeComponent(submission['event_id'] as String);
+
+      // 3. Listen to Gradio Server-Sent Events. Wait for completion;
+      // do not assume the response is immediately available.
+      final streamRequest = http.Request(
+        'GET',
+        Uri.parse('$base/gradio_api/call/predict/$eventId'),
       );
+      streamRequest.headers['Accept'] = 'text/event-stream';
+      final events = await client
+          .send(streamRequest)
+          .timeout(const Duration(seconds: 60));
+      if (events.statusCode != 200) {
+        throw Exception('Gradio result stream error: ${events.statusCode}');
+      }
+
+      String? eventType;
+      final dataLines = <String>[];
+      final done = Completer<Map<String, dynamic>>();
+
+      void processEvent() {
+        if (dataLines.isEmpty || done.isCompleted) {
+          eventType = null;
+          dataLines.clear();
+          return;
+        }
+        final text = dataLines.join('\n');
+        try {
+          if (eventType == 'complete') {
+            final decoded = jsonDecode(text);
+            // Gradio returns [labelResult, JSONtextboxResult].
+            if (decoded is! List ||
+                decoded.length < 2 ||
+                decoded[1] is! String) {
+              throw const FormatException('Unexpected Gradio outputs');
+            }
+            final result = jsonDecode(decoded[1] as String);
+            if (result is! Map<String, dynamic>) {
+              throw const FormatException('Invalid prediction JSON');
+            }
+            done.complete(result);
+          } else if (eventType == 'error') {
+            done.completeError(Exception('Gradio inference error: $text'));
+          }
+        } catch (e) {
+          done.completeError(e);
+        }
+        eventType = null;
+        dataLines.clear();
+      }
+
+      final subscription = events.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+            (line) {
+              if (line.isEmpty) {
+                processEvent();
+              } else if (line.startsWith('event:')) {
+                eventType = line.substring(6).trim();
+              } else if (line.startsWith('data:')) {
+                dataLines.add(line.substring(5).trimLeft());
+              }
+            },
+            onError: (Object error, StackTrace trace) {
+              if (!done.isCompleted) done.completeError(error, trace);
+            },
+            onDone: () {
+              processEvent();
+              if (!done.isCompleted) {
+                done.completeError(
+                  const FormatException(
+                    'Gradio stream closed without a result',
+                  ),
+                );
+              }
+            },
+          );
+
+      try {
+        return await done.future.timeout(const Duration(minutes: 5));
+      } finally {
+        await subscription.cancel();
+      }
+    } finally {
+      client.close();
     }
-
-    final dynamic decoded = jsonDecode(finalResponse.body);
-
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception(
-        'Invalid response from server',
-      );
-    }
-
-    return decoded;
   }
 
   // ============================================================
-  // UPLOAD TO FIREBASE STORAGE & ENCODE IMAGE
+  // UPLOAD TO PRIVATE SUPABASE STORAGE
   // ============================================================
 
-  Future<String> _uploadToFirebaseStorage() async {
-    try {
-      final User? user = FirebaseAuth.instance.currentUser;
-      final String userId = user?.uid ?? 'guest_user';
-      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final String fileName = 'paddy_classification_$timestamp.jpg';
-
-      final Reference ref = FirebaseStorage.instance
-          .ref()
-          .child('users')
-          .child(userId)
-          .child('paddy_classification')
-          .child(fileName);
-
-      final SettableMetadata metadata = SettableMetadata(
-        contentType: 'image/jpeg',
-      );
-
-      final UploadTask uploadTask = ref.putFile(widget.imageFile, metadata);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
-      debugPrint('Firebase Storage URL: $downloadUrl');
-      return downloadUrl;
-    } catch (e) {
-      debugPrint('Firebase Storage upload warning: $e');
-      return '';
-    }
+  Future<String> _uploadToSupabaseStorage() async {
+    return PaddyStorageService.uploadImage(
+      file: widget.imageFile,
+      testType: 'paddy_classification',
+    );
   }
-
-  Future<String> _encodeImageToBase64() async {
-    try {
-      final Uint8List imageBytes = await widget.imageFile.readAsBytes();
-      return base64Encode(imageBytes);
-    } catch (e) {
-      debugPrint('Image encoding error: $e');
-      return '';
-    }
-  }
-
-  // ============================================================
-  // SAVE RESULT TO FIRESTORE (SAFE BACKGROUND)
-  // ============================================================
 
   Future<void> _saveResultToFirestore({
     required Map<String, dynamic> result,
-    required String imageUrl,
-    required String imageBase64,
+    required String imagePath,
   }) async {
-    try {
-      final User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        debugPrint('Firestore save skipped: user is not logged in.');
-        return;
-      }
-
-      final String variety =
-          result['variety']?.toString() ?? 'Unknown';
-
-      final String grade =
-          result['grade']?.toString() ?? 'Unknown';
-
-      final dynamic confidenceValue = result['confidence'];
-      final double confidence = confidenceValue is num
-          ? confidenceValue.toDouble()
-          : 0.0;
-
-      final dynamic moistureValue = result['moisture'];
-      final double? moisture =
-          moistureValue is num ? moistureValue.toDouble() : null;
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('test_history')
-          .add({
-        'testType': 'paddy_classification',
-        'variety': variety,
-        'grade': grade,
-        'confidence': confidence,
-        'moisture': moisture,
-        'imageUrl': imageUrl,
-        'imageBase64': imageBase64,
-        'localImagePath': widget.imageFile.path,
-        'createdAt': FieldValue.serverTimestamp(),
-        'createdAtLocal': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('Firestore save skipped/failed: $e');
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('Please sign in to save your scan history.');
     }
+    final data = <String, dynamic>{
+      'testType': 'paddy_classification',
+      'confidence': (result['confidence'] as num?)?.toDouble() ?? 0.0,
+      'classIndex': result['class_index'],
+      'predictions': result['all_predictions'] ?? <String, dynamic>{},
+      'imagePath': imagePath,
+      'imageBucket': PaddyStorageService.bucket,
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdAtLocal': DateTime.now().toIso8601String(),
+    };
+    data['variety'] = result['variety']?.toString() ?? 'Unknown';
+    if (result['grade'] != null) data['grade'] = result['grade'];
+    if (result['moisture'] != null) data['moisture'] = result['moisture'];
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('test_history')
+        .add(data);
+    debugPrint('History successfully saved to Firestore');
   }
 
   // ============================================================
@@ -1752,20 +1420,18 @@ class _PaddyClassificationInputPageState
         } else if (seconds == 5) {
           _processingText = 'AI is analyzing your sample...';
         } else if (seconds > 12) {
-          _processingText = 'Waking up AI server, please wait...';
+          _processingText = 'Waiting for Hugging Face GPU...';
         }
       });
     });
 
     try {
-      final Map<String, dynamic> result = await _sendToRender();
+      final Map<String, dynamic> result = await _sendToHuggingFace();
 
       _progressTimer?.cancel();
 
       if (result['success'] != true) {
-        throw Exception(
-          result['error'] ?? 'Prediction failed',
-        );
+        throw Exception(result['error'] ?? 'Prediction failed');
       }
 
       if (!mounted) return;
@@ -1775,19 +1441,25 @@ class _PaddyClassificationInputPageState
         _progress = 1.0;
       });
 
-      // Background safe storage & history save (non-blocking)
+      // Save to private Supabase Storage and Firestore.
+      // If saving fails, show the result but report the failure honestly.
       String imageUrl = '';
-      String imageBase64 = '';
       try {
-        imageUrl = await _uploadToFirebaseStorage();
-        imageBase64 = await _encodeImageToBase64();
-        await _saveResultToFirestore(
-          result: result,
-          imageUrl: imageUrl,
-          imageBase64: imageBase64,
-        );
+        final imagePath = await _uploadToSupabaseStorage();
+        await _saveResultToFirestore(result: result, imagePath: imagePath);
+        imageUrl = await PaddyStorageService.signedImageUrl(imagePath);
       } catch (err) {
-        debugPrint('Non-critical background storage error: $err');
+        debugPrint('History save failed: $err');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Prediction worked, but history was not fully saved: $err',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
 
       if (!mounted) return;
@@ -1805,7 +1477,6 @@ class _PaddyClassificationInputPageState
           ),
         ),
       );
-
     } catch (e) {
       _progressTimer?.cancel();
       debugPrint('Paddy classification processing error: $e');
@@ -1819,9 +1490,7 @@ class _PaddyClassificationInputPageState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Analysis failed: $e',
-          ),
+          content: Text('Analysis failed: $e'),
           backgroundColor: Colors.red.shade700,
         ),
       );
@@ -1835,18 +1504,15 @@ class _PaddyClassificationInputPageState
   Widget _processingView() {
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
 
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(24),
       ),
 
       child: Column(
         children: [
-
           const SizedBox(
             width: 70,
             height: 70,
@@ -1856,92 +1522,57 @@ class _PaddyClassificationInputPageState
             ),
           ),
 
-          const SizedBox(
-            height: 24,
-          ),
+          const SizedBox(height: 24),
 
           Text(
             'Analyzing Paddy',
-            style:
-                GoogleFonts.poppins(
+            style: GoogleFonts.poppins(
               fontSize: 22,
-              fontWeight:
-                  FontWeight.bold,
-              color:
-                  Colors.black87,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
             ),
           ),
 
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
 
           Text(
             _processingText,
-            textAlign:
-                TextAlign.center,
-            style:
-                GoogleFonts.poppins(
-              fontSize: 14,
-              color:
-                  Colors.black54,
-            ),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 14, color: Colors.black54),
           ),
 
-          const SizedBox(
-            height: 22,
-          ),
+          const SizedBox(height: 22),
 
           ClipRRect(
-            borderRadius:
-                BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20),
 
-            child:
-                LinearProgressIndicator(
+            child: LinearProgressIndicator(
               minHeight: 8,
               value: _progress,
-              backgroundColor:
-                  const Color(
-                0xFFE8E8E8,
-              ),
-              valueColor:
-                  const AlwaysStoppedAnimation<
-                      Color>(
+              backgroundColor: const Color(0xFFE8E8E8),
+              valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF4CAF7D),
               ),
             ),
           ),
 
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
 
           Text(
             '${(_progress * 100).round()}%',
-            style:
-                GoogleFonts.poppins(
+            style: GoogleFonts.poppins(
               fontSize: 12,
-              fontWeight:
-                  FontWeight.w600,
-              color:
-                  Colors.black54,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
             ),
           ),
 
-          const SizedBox(
-            height: 20,
-          ),
+          const SizedBox(height: 20),
 
           Text(
             'Please keep the app open while we process your image.',
-            textAlign:
-                TextAlign.center,
-            style:
-                GoogleFonts.poppins(
-              fontSize: 12,
-              color:
-                  Colors.black45,
-            ),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.black45),
           ),
         ],
       ),
@@ -1954,167 +1585,101 @@ class _PaddyClassificationInputPageState
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF6F3ED),
+      backgroundColor: const Color(0xFFF6F3ED),
 
       appBar: AppBar(
-        backgroundColor:
-            const Color(0xFFF6F3ED),
+        backgroundColor: const Color(0xFFF6F3ED),
         elevation: 0,
 
         title: Text(
           'Paddy Classification',
-          style:
-              GoogleFonts.poppins(
-            color:
-                Colors.black87,
-            fontWeight:
-                FontWeight.w600,
+          style: GoogleFonts.poppins(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
           ),
         ),
 
-        iconTheme:
-            const IconThemeData(
-          color: Colors.black87,
-        ),
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
 
       body: SafeArea(
         child: Padding(
-          padding:
-              const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
 
-          child:
-              _isRunning
-                  ? Center(
-                      child:
-                          SingleChildScrollView(
-                        child:
-                            _processingView(),
+          child: _isRunning
+              ? Center(child: SingleChildScrollView(child: _processingView()))
+              : Column(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+
+                        child: Image.file(
+                          widget.imageFile,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                    )
-                  : Column(
-                      children: [
-
-                        Expanded(
-                          child:
-                              ClipRRect(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              24,
-                            ),
-
-                            child:
-                                Image.file(
-                              widget.imageFile,
-                              width:
-                                  double.infinity,
-                              fit:
-                                  BoxFit.cover,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        if (_errorMessage !=
-                            null)
-                          Padding(
-                            padding:
-                                const EdgeInsets
-                                    .only(
-                              bottom: 12,
-                            ),
-
-                            child:
-                                Text(
-                              _errorMessage!,
-                              textAlign:
-                                  TextAlign.center,
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.red,
-                                fontSize:
-                                    12,
-                              ),
-                            ),
-                          ),
-
-                        SizedBox(
-                          width:
-                              double.infinity,
-
-                          child:
-                              ElevatedButton(
-                            onPressed:
-                                _runPaddyClassificationTest,
-
-                            style:
-                                ElevatedButton
-                                    .styleFrom(
-                              backgroundColor:
-                                  const Color(
-                                0xFF4CAF7D,
-                              ),
-
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                vertical:
-                                    16,
-                              ),
-
-                              shape:
-                                  RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  16,
-                                ),
-                              ),
-                            ),
-
-                            child:
-                                Text(
-                              'Analyze Paddy Sample',
-                              style:
-                                  GoogleFonts.poppins(
-                                color:
-                                    Colors.white,
-                                fontWeight:
-                                    FontWeight
-                                        .w600,
-                                fontSize:
-                                    16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
+
+                    const SizedBox(height: 20),
+
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+
+                        child: Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+
+                    SizedBox(
+                      width: double.infinity,
+
+                      child: ElevatedButton(
+                        onPressed: _runPaddyClassificationTest,
+
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4CAF7D),
+
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+
+                        child: Text(
+                          'Analyze Paddy Sample',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
   }
 }
 
-
 // ================================================================
 // PADDY CLASSIFICATION RESULT PAGE
 // ================================================================
 
-class PaddyClassificationResultPage
-    extends StatelessWidget {
-
+class PaddyClassificationResultPage extends StatelessWidget {
   final File imageFile;
-  final Map<String, dynamic>
-      result;
+  final Map<String, dynamic> result;
   final String imageUrl;
 
   const PaddyClassificationResultPage({
@@ -2125,255 +1690,155 @@ class PaddyClassificationResultPage
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
+    final String variety = result['variety']?.toString() ?? 'Unknown';
 
-    final String variety =
-        result['variety']
-                ?.toString() ??
-            'Unknown';
+    final String grade = result['grade']?.toString() ?? 'Unknown';
 
-    final String grade =
-        result['grade']
-                ?.toString() ??
-            'Unknown';
+    final double confidence = result['confidence'] is num
+        ? (result['confidence'] as num).toDouble()
+        : 0.0;
 
-    final double confidence =
-        result['confidence']
-                is num
-            ? (result['confidence']
-                    as num)
-                .toDouble()
-            : 0.0;
-
-    final double? moisture =
-        result['moisture'] is num
-            ? (result['moisture']
-                    as num)
-                .toDouble()
-            : null;
+    final double? moisture = result['moisture'] is num
+        ? (result['moisture'] as num).toDouble()
+        : null;
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF6F3ED),
+      backgroundColor: const Color(0xFFF6F3ED),
 
       appBar: AppBar(
-        backgroundColor:
-            const Color(0xFFF6F3ED),
+        backgroundColor: const Color(0xFFF6F3ED),
         elevation: 0,
 
-        title:
-            Text(
+        title: Text(
           'Paddy Classification Result',
-          style:
-              GoogleFonts.poppins(
-            color:
-                Colors.black87,
-            fontWeight:
-                FontWeight.w600,
+          style: GoogleFonts.poppins(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
           ),
         ),
 
-        iconTheme:
-            const IconThemeData(
-          color: Colors.black87,
-        ),
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
 
       body: SafeArea(
-        child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            20,
-          ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
 
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment
-                    .stretch,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
 
             children: [
-
               // --------------------------------------------------
               // CAPTURED IMAGE
               // --------------------------------------------------
-
               ClipRRect(
-                borderRadius:
-                    BorderRadius
-                        .circular(24),
+                borderRadius: BorderRadius.circular(24),
 
-                child:
-                    Image.file(
+                child: Image.file(
                   imageFile,
                   height: 300,
-                  width:
-                      double.infinity,
-                  fit:
-                      BoxFit.cover,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // MAIN RESULT
               // --------------------------------------------------
-
               Container(
-                padding:
-                    const EdgeInsets
-                        .all(20),
+                padding: const EdgeInsets.all(20),
 
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.white,
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    24,
-                  ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
                 ),
 
                 child: Column(
                   children: [
-
                     const Icon(
-                      Icons
-                          .grass_rounded,
+                      Icons.grass_rounded,
                       size: 52,
-                      color:
-                          Color(
-                        0xFF4CAF7D,
-                      ),
+                      color: Color(0xFF4CAF7D),
                     ),
 
-                    const SizedBox(
-                      height: 12,
-                    ),
+                    const SizedBox(height: 12),
 
                     Text(
                       variety,
-                      textAlign:
-                          TextAlign.center,
+                      textAlign: TextAlign.center,
 
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 25,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                        color:
-                            Colors.black87,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 10,
-                    ),
+                    const SizedBox(height: 10),
 
-                    Container(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
+                    if (result['grade'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
 
-                      decoration:
-                          BoxDecoration(
-                        color: const Color(
-                          0xFF4CAF7D,
-                        ).withOpacity(0.12),
-                        borderRadius:
-                            BorderRadius
-                                .circular(20),
-                      ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4CAF7D).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
 
-                      child: Text(
-                        'Grade $grade',
-                        style: GoogleFonts
-                            .poppins(
-                          fontSize: 14,
-                          fontWeight:
-                              FontWeight
-                                  .w600,
-                          color:
-                              const Color(
-                            0xFF2E7D53,
+                        child: Text(
+                          'Grade $grade',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF2E7D53),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(
-                      height: 16,
-                    ),
+                    const SizedBox(height: 16),
 
                     Text(
                       'Confidence',
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 14,
-                        color:
-                            Colors.black54,
+                        color: Colors.black54,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 4,
-                    ),
+                    const SizedBox(height: 4),
 
                     Text(
                       '${confidence.toStringAsFixed(2)}%',
-                      style:
-                          GoogleFonts
-                              .poppins(
+                      style: GoogleFonts.poppins(
                         fontSize: 32,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                        color:
-                            const Color(
-                          0xFF4CAF7D,
-                        ),
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF4CAF7D),
                       ),
                     ),
 
                     if (moisture != null) ...[
-                      const SizedBox(
-                        height: 16,
-                      ),
+                      const SizedBox(height: 16),
 
                       Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment
-                                .center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(
-                            Icons
-                                .water_drop_rounded,
+                            Icons.water_drop_rounded,
                             size: 16,
-                            color: Colors
-                                .blue,
+                            color: Colors.blue,
                           ),
-                          const SizedBox(
-                            width: 6,
-                          ),
+                          const SizedBox(width: 6),
                           Text(
                             '${moisture.toStringAsFixed(1)}% Moisture',
-                            style: GoogleFonts
-                                .poppins(
+                            style: GoogleFonts.poppins(
                               fontSize: 13,
-                              color: Colors
-                                  .black54,
+                              color: Colors.black54,
                             ),
                           ),
                         ],
@@ -2383,61 +1848,34 @@ class PaddyClassificationResultPage
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // SAVED CONFIRMATION
               // --------------------------------------------------
-
               Container(
-                padding:
-                    const EdgeInsets
-                        .all(16),
+                padding: const EdgeInsets.all(16),
 
-                decoration:
-                    BoxDecoration(
-                  color:
-                      const Color(
-                    0xFFE8F5E9,
-                  ),
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    18,
-                  ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(18),
                 ),
 
                 child: Row(
                   children: [
-
                     const Icon(
-                      Icons
-                          .cloud_done_rounded,
-                      color:
-                          Color(
-                        0xFF2E7D53,
-                      ),
+                      Icons.cloud_done_rounded,
+                      color: Color(0xFF2E7D53),
                     ),
 
-                    const SizedBox(
-                      width: 10,
-                    ),
+                    const SizedBox(width: 10),
 
                     Expanded(
-                      child:
-                          Text(
-                        'This result and image have been saved to your history.',
-                        style:
-                            GoogleFonts
-                                .poppins(
-                          fontSize:
-                              12,
-                          color:
-                              const Color(
-                            0xFF2E7D53,
-                          ),
+                      child: Text(
+                        'History is saved when you are signed in and storage is available.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF2E7D53),
                         ),
                       ),
                     ),
@@ -2445,63 +1883,35 @@ class PaddyClassificationResultPage
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // --------------------------------------------------
               // DONE
               // --------------------------------------------------
-
               SizedBox(
-                width:
-                    double.infinity,
+                width: double.infinity,
 
-                child:
-                    ElevatedButton(
+                child: ElevatedButton(
                   onPressed: () {
-                    Navigator.of(
-                      context,
-                    ).pop();
+                    Navigator.of(context).pop();
                   },
 
-                  style:
-                      ElevatedButton
-                          .styleFrom(
-                    backgroundColor:
-                        const Color(
-                      0xFF4CAF7D,
-                    ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4CAF7D),
 
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
 
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        16,
-                      ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
 
-                  child:
-                      Text(
+                  child: Text(
                     'Done',
-                    style:
-                        GoogleFonts
-                            .poppins(
-                      color:
-                          Colors.white,
-                      fontWeight:
-                          FontWeight
-                              .w600,
-                      fontSize:
-                          16,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
                     ),
                   ),
                 ),

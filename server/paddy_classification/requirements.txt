@@ -1,7 +1,4 @@
-﻿tensorflow>=2.15.0
-keras
-Flask
-flask-cors
-gunicorn
-numpy
+﻿timm
+torchvision
 Pillow
+numpy

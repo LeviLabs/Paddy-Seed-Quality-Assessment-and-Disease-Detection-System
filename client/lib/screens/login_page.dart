@@ -32,9 +32,7 @@ class _LoginPageState extends State<LoginPage>
 
   bool _isGoogleSigningIn = false;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email'],
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
 
   // ============================================================
   // INIT STATE
@@ -46,52 +44,32 @@ class _LoginPageState extends State<LoginPage>
 
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(
-        milliseconds: 1600,
-      ),
+      duration: const Duration(milliseconds: 1600),
     );
 
-    _logoSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1.5),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(
-          0.0,
-          0.6,
-          curve: Curves.easeOutQuart,
-        ),
-      ),
-    );
+    _logoSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.0, 0.6, curve: Curves.easeOutQuart),
+          ),
+        );
 
-    _taglineSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 2.0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(
-          0.2,
-          0.8,
-          curve: Curves.easeOutQuart,
-        ),
-      ),
-    );
+    _taglineSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 2.0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.2, 0.8, curve: Curves.easeOutQuart),
+          ),
+        );
 
-    _buttonSlideAnimation = Tween<Offset>(
-      begin: const Offset(0, 2.0),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(
-          0.4,
-          1.0,
-          curve: Curves.easeOutQuart,
-        ),
-      ),
-    );
+    _buttonSlideAnimation =
+        Tween<Offset>(begin: const Offset(0, 2.0), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.4, 1.0, curve: Curves.easeOutQuart),
+          ),
+        );
 
     _animationController.forward();
   }
@@ -120,72 +98,53 @@ class _LoginPageState extends State<LoginPage>
           Positioned.fill(
             child: Image.asset(
               'assets/images/background.jpg',
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
             ),
           ),
 
           SafeArea(
             child: Column(
               children: [
-                const SizedBox(
-                  height: 20,
-                ),
+                const SizedBox(height: 20),
 
                 // Logo
                 _buildLogoSection(),
 
-                const SizedBox(
-                  height: 11,
-                ),
+                const SizedBox(height: 11),
 
                 // Tagline
                 SlideTransition(
                   position: _taglineSlideAnimation,
                   child: const Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 50.0,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 50.0),
                     child: Text(
                       'Healthy Seeds.\nSmarter Farming.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 20,
-                        color: Color.fromARGB(
-                          218,
-                          181,
-                          135,
-                          10,
-                        ),
+                        color: Color.fromARGB(218, 181, 135, 10),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height: 40,
-                ),
+                const SizedBox(height: 40),
 
                 // Google button
                 SlideTransition(
                   position: _buttonSlideAnimation,
                   child: Transform.translate(
-                    offset: const Offset(
-                      0,
-                      190,
-                    ),
+                    offset: const Offset(0, 120),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: _buildGoogleSignUpButton(),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height: 55,
-                ),
+                const SizedBox(height: 55),
               ],
             ),
           ),
@@ -232,9 +191,7 @@ class _LoginPageState extends State<LoginPage>
       width: double.infinity,
       height: 65,
       child: ElevatedButton.icon(
-        onPressed: _isGoogleSigningIn
-            ? null
-            : _handleGoogleSignIn,
+        onPressed: _isGoogleSigningIn ? null : _handleGoogleSignIn,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           disabledBackgroundColor: Colors.white,
@@ -289,8 +246,7 @@ class _LoginPageState extends State<LoginPage>
       // Google account
       // ----------------------------------------------------------
 
-      final GoogleSignInAccount? googleUser =
-          await _googleSignIn.signIn();
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       // User cancelled Google login.
       if (googleUser == null) {
@@ -314,8 +270,7 @@ class _LoginPageState extends State<LoginPage>
       // Firebase credential
       // ----------------------------------------------------------
 
-      final AuthCredential credential =
-          GoogleAuthProvider.credential(
+      final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
@@ -324,38 +279,26 @@ class _LoginPageState extends State<LoginPage>
       // Firebase login
       // ----------------------------------------------------------
 
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(
-        credential,
-      );
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
       final User? user = userCredential.user;
 
       if (user == null) {
-        throw Exception(
-          'Unable to create Firebase user.',
-        );
+        throw Exception('Unable to create Firebase user.');
       }
 
       // ----------------------------------------------------------
       // Save/update basic user information
       // ----------------------------------------------------------
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set(
-        {
-          'uid': user.uid,
-          'email': user.email,
-          'name': user.displayName ?? '',
-          'photoUrl': user.photoURL ?? '',
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': user.email,
+        'name': user.displayName ?? '',
+        'photoUrl': user.photoURL ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       // ----------------------------------------------------------
       // CHECK LANGUAGE FROM FIRESTORE
@@ -389,52 +332,36 @@ class _LoginPageState extends State<LoginPage>
         // Language already saved in Firestore.
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const HomeScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
       } else {
         // New user:
         // Language has not been selected yet.
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => const LanguageSelectionPage(),
-          ),
+          MaterialPageRoute(builder: (_) => const LanguageSelectionPage()),
         );
       }
     } on FirebaseAuthException catch (e) {
-      debugPrint(
-        'Firebase Auth Error: ${e.code}',
-      );
+      debugPrint('Firebase Auth Error: ${e.code}');
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Login failed: ${e.message ?? e.code}',
-          ),
-        ),
+        SnackBar(content: Text('Login failed: ${e.message ?? e.code}')),
       );
     } catch (e) {
-      debugPrint(
-        'Google Sign-In Error: $e',
-      );
+      debugPrint('Google Sign-In Error: $e');
 
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Login Failed\n$e',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login Failed\n$e')));
     } finally {
       if (mounted) {
         setState(() {

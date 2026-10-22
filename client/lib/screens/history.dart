@@ -1,210 +1,189 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-// ================================================================
-// HISTORY ENTRY MODEL
-// ================================================================
-// Generic enough to cover both "Plant Disease" and
-// "Paddy Classification" results. Swap the sample data in
-// `_HistoryPageState._loadHistory()` for your real API/DB call
-// whenever it's ready — everything else just renders this model.
-
-enum HistoryTestType { plantDisease, paddyClassification }
-
-class HistoryEntry {
-  final String id;
-  final HistoryTestType testType;
-  final String imagePath; // asset path, file path, or network URL
-  final bool isNetworkImage;
-  final String title; // e.g. "Paddy Sample #24"
-  final String subtitle; // e.g. "IR64 Variety" or disease name
-  final String resultLabel; // e.g. "Grade A" or "Healthy"
-  final Color resultColor;
-  final DateTime date;
-  final String? moistureLabel; // e.g. "12.4% Moisture" (paddy only)
-
-  const HistoryEntry({
-    required this.id,
-    required this.testType,
-    required this.imagePath,
-    required this.title,
-    required this.subtitle,
-    required this.resultLabel,
-    required this.resultColor,
-    required this.date,
-    this.isNetworkImage = false,
-    this.moistureLabel,
-  });
-}
-
-// ================================================================
-// HISTORY PAGE — call HistoryPage.show(context) to open it
-// ================================================================
-// Slides up from the bottom with rounded top corners, like a
-// tall modal sheet, and dims the screen behind it.
+import '../services/paddy_storage_service.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
-
-  static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => const HistoryPage(),
-    );
-  }
-
+  static Future<void> show(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => const HistoryPage(),
+  );
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
-  late Future<List<HistoryEntry>> _historyFuture;
-
+  Future<List<_Scan>>? _future;
   @override
   void initState() {
     super.initState();
-    _historyFuture = _loadHistory();
+    _reload();
   }
 
-  // ------------------------------------------------------------
-  // Replace this with your real data source (local DB, API, etc).
-  // Left as sample data so the page renders end-to-end right away.
-  // ------------------------------------------------------------
-  Future<List<HistoryEntry>> _loadHistory() async {
-    await Future.delayed(const Duration(milliseconds: 300));
+  void _reload() => _future = _load();
 
-    return [
-      HistoryEntry(
-        id: '24',
-        testType: HistoryTestType.paddyClassification,
-        imagePath: 'assets/images/sample_paddy_1.png',
-        title: 'Paddy Sample #24',
-        subtitle: 'IR64 Variety',
-        resultLabel: 'Grade A',
-        resultColor: const Color(0xFF2E7D53),
-        date: DateTime(2025, 5, 16),
-        moistureLabel: '12.4% Moisture',
-      ),
-      HistoryEntry(
-        id: '23',
-        testType: HistoryTestType.plantDisease,
-        imagePath: 'assets/images/sample_leaf_1.png',
-        title: 'Leaf Scan #23',
-        subtitle: 'Bacterial Leaf Blight',
-        resultLabel: 'At Risk',
-        resultColor: const Color(0xFFD97706),
-        date: DateTime(2025, 5, 12),
-      ),
-      HistoryEntry(
-        id: '22',
-        testType: HistoryTestType.paddyClassification,
-        imagePath: 'assets/images/sample_paddy_2.png',
-        title: 'Paddy Sample #22',
-        subtitle: 'Basmati Variety',
-        resultLabel: 'Grade B',
-        resultColor: const Color(0xFFCA8A04),
-        date: DateTime(2025, 5, 9),
-        moistureLabel: '14.1% Moisture',
-      ),
-      HistoryEntry(
-        id: '21',
-        testType: HistoryTestType.plantDisease,
-        imagePath: 'assets/images/sample_leaf_2.png',
-        title: 'Leaf Scan #21',
-        subtitle: 'No Disease Detected',
-        resultLabel: 'Healthy',
-        resultColor: const Color(0xFF2E7D53),
-        date: DateTime(2025, 5, 3),
-      ),
-    ];
+  Future<List<_Scan>> _load() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return [];
+    final query = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('test_history')
+        .limit(100)
+        .get()
+        .timeout(const Duration(seconds: 20));
+    final scans = <_Scan>[];
+    for (final doc in query.docs) {
+      final data = doc.data();
+      // Do not wait for Supabase images before displaying Firestore history.
+      final url = (data['imageUrl'] ?? '').toString();
+      DateTime date;
+      if (data['createdAt'] is Timestamp) {
+        date = (data['createdAt'] as Timestamp).toDate();
+      } else {
+        date =
+            DateTime.tryParse((data['createdAtLocal'] ?? '').toString()) ??
+            DateTime.now();
+      }
+      scans.add(_Scan(doc.id, data, date, url));
+    }
+    scans.sort((a, b) => b.date.compareTo(a.date));
+    return scans;
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    final double screenHeight = MediaQuery.of(context).size.height;
-
     return Container(
-      height: screenHeight * 0.9,
+      height: MediaQuery.sizeOf(context).height * .90,
       decoration: const BoxDecoration(
         color: Color(0xFFF6F3ED),
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(28),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
         children: [
-          _dragHandle(),
-          _header(),
-          Expanded(
-            child: FutureBuilder<List<HistoryEntry>>(
-              future: _historyFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF4CAF7D),
-                      strokeWidth: 2,
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Test History',
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => setState(_reload),
+                  icon: const Icon(Icons.refresh),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<_Scan>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return _centerText('Could not load history', '${snap.error}');
+                }
+                final scans = snap.data ?? [];
+                if (scans.isEmpty) {
+                  return _centerText(
+                    'No scans yet',
+                    FirebaseAuth.instance.currentUser == null
+                        ? 'Sign in to save and view your scans.'
+                        : 'Your next analysis will appear here.',
                   );
                 }
-
-                if (snapshot.hasError) {
-                  return _emptyOrErrorState(
-                    icon: Icons.error_outline_rounded,
-                    title: 'Could not load history',
-                    subtitle: 'Pull down and try again',
-                  );
-                }
-
-                final List<HistoryEntry> entries =
-                    snapshot.data ?? const [];
-
-                if (entries.isEmpty) {
-                  return _emptyOrErrorState(
-                    icon: Icons.history_rounded,
-                    title: 'No scans yet',
-                    subtitle:
-                        'Your analyzed photos will show up here',
-                  );
-                }
-
                 return RefreshIndicator(
-                  color: const Color(0xFF4CAF7D),
                   onRefresh: () async {
-                    setState(() {
-                      _historyFuture = _loadHistory();
-                    });
-                    await _historyFuture;
+                    setState(_reload);
+                    await _future;
                   },
                   child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(
-                      20,
-                      4,
-                      20,
-                      24,
-                    ),
-                    itemCount: entries.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      return _HistoryCard(
-                        entry: entries[index],
-                        onTap: () {
-                          // TODO: navigate to a detail page for
-                          // entries[index] whenever that's ready.
-                        },
+                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+                    itemCount: scans.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final scan = scans[i];
+                      return Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _showDetail(scan),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                _image(scan, 66),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        scan.isPaddy
+                                            ? 'Paddy Classification'
+                                            : 'Plant Disease',
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        scan.name.replaceAll('_', ' '),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 13,
+                                          color: const Color(0xFF2E7D53),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${scan.confidence.toStringAsFixed(2)}% • ${scan.date.day}/${scan.date.month}/${scan.date.year}',
+                                        style: const TextStyle(
+                                          color: Colors.black54,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Colors.black38,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -217,291 +196,179 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  // ------------------------------------------------------------
-  // DRAG HANDLE
-  // ------------------------------------------------------------
-
-  Widget _dragHandle() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: Container(
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------
-  // HEADER
-  // ------------------------------------------------------------
-
-  Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Test History',
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(
-              Icons.close_rounded,
-              color: Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------
-  // EMPTY / ERROR STATE
-  // ------------------------------------------------------------
-
-  Widget _emptyOrErrorState({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    return Center(
+  Widget _centerText(String title, String detail) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 44, color: Colors.black26),
+          const Icon(Icons.history, size: 42, color: Colors.black38),
           const SizedBox(height: 12),
           Text(
             title,
             style: GoogleFonts.poppins(
-              fontSize: 15,
+              fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.black.withOpacity(0.5),
-            ),
-          ),
+          const SizedBox(height: 8),
+          Text(detail, textAlign: TextAlign.center),
         ],
+      ),
+    ),
+  );
+
+  Widget _image(_Scan scan, double size) {
+    Widget child;
+    if (scan.imagePath.isNotEmpty) {
+      child = FutureBuilder<String>(
+        future: scan.signedUrl,
+        builder: (context, snapshot) {
+          final url = snapshot.data;
+          if (url != null && url.isNotEmpty) {
+            return Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, error, stackTrace) => _placeholder(scan),
+            );
+          }
+          return _placeholder(scan);
+        },
+      );
+    } else if (scan.url.isNotEmpty) {
+      child = Image.network(
+        scan.url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, error, stackTrace) => _placeholder(scan),
+      );
+    } else if (scan.legacyBase64.isNotEmpty) {
+      try {
+        final Uint8List bytes = base64Decode(scan.legacyBase64);
+        child = Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _placeholder(scan),
+        );
+      } catch (_) {
+        child = _placeholder(scan);
+      }
+    } else {
+      child = _placeholder(scan);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(width: size, height: size, child: child),
+    );
+  }
+
+  Widget _placeholder(_Scan scan) => Container(
+    color: const Color(0xFFF0EBE0),
+    child: Icon(scan.isPaddy ? Icons.grass : Icons.eco, color: Colors.black38),
+  );
+
+  void _showDetail(_Scan scan) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => FractionallySizedBox(
+        heightFactor: .85,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Scan Details',
+                        style: GoogleFonts.poppins(
+                          fontSize: 21,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                Center(child: _image(scan, 240)),
+                const SizedBox(height: 20),
+                Text(
+                  scan.name.replaceAll('_', ' '),
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 23,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Confidence: ${scan.confidence.toStringAsFixed(2)}%',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 17,
+                    color: const Color(0xFF2E7D53),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Recorded: ${scan.date.toLocal()}',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Predictions',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+                ),
+                ...scan.predictions.entries.map(
+                  (entry) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(entry.key.replaceAll('_', ' '))),
+                        Text(
+                          entry.value is num
+                              ? '${(entry.value as num).toStringAsFixed(2)}%'
+                              : entry.value.toString(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-// ================================================================
-// HISTORY CARD — matches the reference design:
-// circular thumbnail, title, colored subtitle, result pill + chevron,
-// date + (optional) moisture row with icons.
-// ================================================================
-
-class _HistoryCard extends StatelessWidget {
-  final HistoryEntry entry;
-  final VoidCallback? onTap;
-
-  const _HistoryCard({
-    required this.entry,
-    this.onTap,
-  });
-
-  String _formattedDate(DateTime date) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _thumbnail(),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            entry.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        _resultPill(),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: Colors.black38,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      entry.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: const Color(0xFF2E7D53),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today_rounded,
-                          size: 13,
-                          color: Colors.black.withOpacity(0.4),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _formattedDate(entry.date),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.black.withOpacity(0.55),
-                          ),
-                        ),
-
-                        if (entry.moistureLabel != null) ...[
-                          const SizedBox(width: 14),
-                          Icon(
-                            Icons.water_drop_rounded,
-                            size: 13,
-                            color: Colors.blue.withOpacity(0.55),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            entry.moistureLabel!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black.withOpacity(0.55),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _thumbnail() {
-    ImageProvider image;
-
-    if (entry.imagePath.startsWith('data:image') || entry.imagePath.length > 300) {
-      try {
-        final String rawBase64 = entry.imagePath.contains(',')
-            ? entry.imagePath.split(',').last
-            : entry.imagePath;
-        final Uint8List bytes = base64Decode(rawBase64);
-        image = MemoryImage(bytes);
-      } catch (_) {
-        image = AssetImage(entry.imagePath);
-      }
-    } else if (entry.isNetworkImage || entry.imagePath.startsWith('http')) {
-      image = NetworkImage(entry.imagePath);
-    } else if (File(entry.imagePath).existsSync()) {
-      image = FileImage(File(entry.imagePath));
-    } else {
-      image = AssetImage(entry.imagePath);
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Image(
-        image: image,
-        width: 56,
-        height: 56,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 56,
-            height: 56,
-            color: const Color(0xFFF0EBE0),
-            child: Icon(
-              entry.testType == HistoryTestType.paddyClassification
-                  ? Icons.grass_rounded
-                  : Icons.eco_rounded,
-              color: Colors.black26,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _resultPill() {
-    return Container(
-      margin: const EdgeInsets.only(left: 8),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: entry.resultColor.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        entry.resultLabel,
-        style: GoogleFonts.poppins(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: entry.resultColor,
-        ),
-      ),
-    );
-  }
+class _Scan {
+  final String id;
+  final Map<String, dynamic> data;
+  final DateTime date;
+  final String url;
+  _Scan(this.id, this.data, this.date, this.url);
+  Future<String>? _cachedSignedUrl;
+  String get imagePath => (data['imagePath'] ?? '').toString();
+  Future<String> get signedUrl =>
+      _cachedSignedUrl ??= PaddyStorageService.signedImageUrl(imagePath)
+          .timeout(const Duration(seconds: 12), onTimeout: () => '')
+          .catchError((Object error) {
+            debugPrint('History image unavailable: $error');
+            return '';
+          });
+  bool get isPaddy => data['testType'] == 'paddy_classification';
+  String get name =>
+      (isPaddy ? data['variety'] : data['disease'])?.toString() ?? 'Unknown';
+  double get confidence => (data['confidence'] as num?)?.toDouble() ?? 0;
+  Map<String, dynamic> get predictions => data['predictions'] is Map
+      ? Map<String, dynamic>.from(data['predictions'] as Map)
+      : {};
+  String get legacyBase64 => (data['imageBase64'] ?? '').toString();
 }
